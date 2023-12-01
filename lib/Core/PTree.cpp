@@ -31,6 +31,30 @@ cl::opt<bool>
 
 } // namespace
 
+void PTreeNode::recalcDepth() {  
+  PTreeNode *curNode = this;
+  uint32_t lDepth = 0;
+  uint32_t rDepth = 0;
+  curNode->treeDepth = 0;
+  while (curNode)
+  {
+    if (curNode->left.getPointer()){
+      lDepth = curNode->left.getPointer()->treeDepth;
+    }
+    if (curNode->right.getPointer()){
+      rDepth = curNode->right.getPointer()->treeDepth;
+    }
+    if (curNode->treeDepth > std::max(lDepth,rDepth)+1){
+      return;
+    }
+    else{
+      curNode->treeDepth = std::max(lDepth,rDepth)+1;
+      curNode = curNode->parent;
+    }
+  }
+}
+
+
 PTree::PTree(ExecutionState *initialState, uint32_t treeID) {
   id = treeID;
   root = PTreeNodePtr(new PTreeNode(nullptr, initialState, id));
@@ -44,6 +68,7 @@ void PTree::attach(PTreeNode *node, ExecutionState *leftState,
          "Attach assumes the right state is the current state");
   node->state = nullptr;
   node->left = PTreeNodePtr(new PTreeNode(node, leftState, id));
+  node->branchReason = reason;
   // The current node inherits the tag
   uint8_t currentNodeTag = root.getInt();
   if (node->parent)
@@ -52,6 +77,7 @@ void PTree::attach(PTreeNode *node, ExecutionState *leftState,
                          : node->parent->right.getInt();
   node->right =
       PTreeNodePtr(new PTreeNode(node, rightState, id), currentNodeTag);
+  node->recalcDepth();
 }
 
 void PTree::remove(PTreeNode *n) {
@@ -89,9 +115,9 @@ void PTree::remove(PTreeNode *n) {
         parent->right = child;
       }
     }
-
     delete n;
-  }
+    parent->recalcDepth();   
+  }   
 }
 
 void PTree::dump(llvm::raw_ostream &os) {
