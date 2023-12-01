@@ -19,6 +19,7 @@ DISABLE_WARNING_PUSH
 DISABLE_WARNING_DEPRECATED_DECLARATIONS
 #include "llvm/ADT/PointerIntPair.h"
 DISABLE_WARNING_POP
+#include <optional>
 
 namespace klee {
 class ExecutionState;
@@ -34,11 +35,12 @@ using PTreeNodePtr = llvm::PointerIntPair<PTreeNode *, PtrBitCount, uint8_t>;
 class PTreeNode {
 public:
   PTreeNode *parent = nullptr;
-
   PTreeNodePtr left;
   PTreeNodePtr right;
   ExecutionState *state = nullptr;
-
+  uint32_t treeDepth = 1;
+  std::optional<BranchType> branchReason;
+  void recalcDepth ();
   std::uint32_t treeID;
 
   PTreeNode(const PTreeNode &) = delete;
