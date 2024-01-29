@@ -84,7 +84,8 @@ public:
     NURS_RP,
     NURS_ICnt,
     NURS_CPICnt,
-    NURS_QC
+    NURS_QC,
+    WeightedRandomPath
   };
 };
 
@@ -363,6 +364,54 @@ public:
   bool empty() override;
   void printName(llvm::raw_ostream &os) override;
 };
+
+// .h
+class SelectNSearcher final : public Searcher {
+  std::unique_ptr<Searcher> baseSearcher;
+  std::vector<ExecutionState *> statesBuffer;
+  // std::vector<ExecutionState *> states;
+  int Num;
+  
+public:
+  explicit SelectNSearcher(Searcher *baseSearcher, int Num);
+    ~SelectNSearcher() override = default;
+  ExecutionState &selectState() override;
+  void update(ExecutionState *current,
+              const std::vector<ExecutionState *> &addedStates,
+              const std::vector<ExecutionState *> &removedStates) override;
+  bool empty() override;
+  void printName(llvm::raw_ostream &os) override;
+};
+ 
+
+// .h2
+class WeightedRandomPathSearcher final : public Searcher {
+  public:
+  enum WeightType : std::uint8_t {
+    Uniform,  // all weights == 1
+    TreeDepth, 
+    Unsatisfiabilitys,
+  };
+private:
+  WeightType type;
+  PForest &processForest;
+  RNG &theRNG;
+  const uint8_t idBitMask;
+  bool updateWeights;
+  double getWeight(PTreeNode *);
+public:
+  /// \param processTree The process tree.
+  /// \param RNG A random number generator.
+  WeightedRandomPathSearcher(WeightType type, PForest &processForest, RNG &rng);
+  ~WeightedRandomPathSearcher() override = default;
+  ExecutionState &selectState() override;
+  void update(ExecutionState *current,
+              const std::vector<ExecutionState *> &addedStates,
+              const std::vector<ExecutionState *> &removedStates) override;
+  bool empty() override;
+  void printName(llvm::raw_ostream &os) override;
+};
+
 
 } // namespace klee
 

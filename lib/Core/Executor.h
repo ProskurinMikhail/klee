@@ -87,6 +87,7 @@ class MemoryManager;
 class MemoryObject;
 class ObjectState;
 class PForest;
+class PTreeNode;
 class Searcher;
 class SeedInfo;
 class SpecialFunctionHandler;
@@ -448,6 +449,11 @@ private:
   /// if ifTrueBlock == ifFalseBlock, then fork is internal
   StatePair fork(ExecutionState &current, ref<Expr> condition,
                  KBlock *ifTrueBlock, KBlock *ifFalseBlock, BranchType reason);
+
+  std::vector<Path::PathIndex> corePathConstraintsIndexes(const ValidityCore &core, const PathConstraints &path);
+  std::vector<PTreeNode *> corePathConstraintsNodes(const std::vector<Path::PathIndex> &pIndexes, const ExecutionState &state);
+  void unsatisfiabilitysCounter(ref<klee::ValidResponse> validResponse, ExecutionState &current);
+
   StatePair forkInternal(ExecutionState &current, ref<Expr> condition,
                          BranchType reason);
 

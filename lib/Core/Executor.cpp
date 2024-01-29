@@ -1248,6 +1248,37 @@ bool Executor::canReachSomeTargetFromBlock(ExecutionState &es, KBlock *block) {
   return false;
 }
 
+std::vector<Path::PathIndex> Executor::corePathConstraintsIndexes(const ValidityCore &core, const PathConstraints &path) {
+  std::vector<Path::PathIndex> res;
+  for (auto &constraint: core.constraints) {  
+    auto pIndexIt = path.indexes().find(constraint);
+    if (pIndexIt != path.indexes().end()) {
+      res.push_back(pIndexIt->second);
+    }
+  }
+  std::sort(res.begin(), res.end(), Path::PathIndexCompare());
+  return res;
+}
+
+std::vector<PTreeNode *> Executor::corePathConstraintsNodes(const std::vector<Path::PathIndex> &pIndexes, const ExecutionState &state) {
+  std::vector<PTreeNode *> res;
+  for (auto &i: pIndexes) {
+    auto curNode = state.indexToNode.find(i);
+    if (curNode != state.indexToNode.end()) {
+      res.push_back(curNode->second);
+    }
+  }
+  return res;
+}
+
+void Executor::unsatisfiabilitysCounter(ref<klee::ValidResponse> validResponse, ExecutionState &current) {
+  std::vector<Path::PathIndex> pIndex = corePathConstraintsIndexes(validResponse->validityCore(), current.constraints);
+  std::vector<PTreeNode *> pTNode = corePathConstraintsNodes(pIndex, current);
+  for (unsigned i = 0; i<pTNode.size(); ++i) {
+    pTNode[i]->unsatisfiabilityRate += i+1;
+  }
+}
+
 Executor::StatePair Executor::fork(ExecutionState &current, ref<Expr> condition,
                                    KBlock *ifTrueBlock, KBlock *ifFalseBlock,
                                    BranchType reason) {
@@ -1273,21 +1304,30 @@ Executor::StatePair Executor::fork(ExecutionState &current, ref<Expr> condition,
   bool terminateEverything = false, success = true;
   if (!shouldCheckTrueBlock) {
     bool mayBeFalse = false;
+    ref<SolverResponse> curResponse;
     if (shouldCheckFalseBlock) {
       // only solver->check-sat(!condition)
-      success = solver->mayBeFalse(current.constraints.cs(), condition,
-                                   mayBeFalse, current.queryMetaData);
+      success = solver->getResponse(current.constraints.cs(), condition,
+                                   curResponse, current.queryMetaData);
+      if (auto validResponse = dyn_cast<ValidResponse>(curResponse)) {
+        unsatisfiabilitysCounter(validResponse, current);
+      }
+      mayBeFalse = isa<InvalidResponse>(curResponse);
     }
     if (!success || !mayBeFalse)
       terminateEverything = true;
     else
       res = PartialValidity::MayBeFalse;
   } else if (!shouldCheckFalseBlock) {
-    // only solver->check-sat(condition)
     bool mayBeTrue;
-    success = solver->mayBeTrue(current.constraints.cs(), condition, mayBeTrue,
-                                current.queryMetaData);
-    if (!success || !mayBeTrue)
+    ref<SolverResponse> curResponse;
+    success = solver->getResponse(current.constraints.cs(), Expr::createIsZero(condition),
+                               curResponse, current.queryMetaData);    
+    if (auto validResponse = dyn_cast<ValidResponse>(curResponse)) {
+        unsatisfiabilitysCounter(validResponse, current);                             
+    }
+    mayBeTrue = isa<InvalidResponse>(curResponse);
+    if (!success && !mayBeTrue)
       terminateEverything = true;
     else
       res = PartialValidity::MayBeTrue;
@@ -1300,9 +1340,21 @@ Executor::StatePair Executor::fork(ExecutionState &current, ref<Expr> condition,
   }
   if (res != PartialValidity::None)
     success = true;
-  else
-    success = solver->evaluate(current.constraints.cs(), condition, res,
-                               current.queryMetaData);
+  else {
+    ref<SolverResponse> queryResult;
+    ref<SolverResponse> negatedQueryResult;
+    success = solver->evaluate(current.constraints.cs(), condition, queryResult, negatedQueryResult, current.queryMetaData);
+    if (success) {
+      res = pValidityEvaluation(queryResult, negatedQueryResult);
+      if (auto validResponse = dyn_cast<ValidResponse>(queryResult)) {
+        unsatisfiabilitysCounter(validResponse, current);                             
+      }
+      else if (auto validResponse = dyn_cast<ValidResponse>(negatedQueryResult)) {
+        unsatisfiabilitysCounter(validResponse, current);                             
+      }
+    }
+    
+  }
   solver->setTimeout(time::Span());
   if (!success) {
     current.pc = current.prevPC;

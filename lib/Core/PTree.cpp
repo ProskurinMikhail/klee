@@ -78,6 +78,8 @@ void PTree::attach(PTreeNode *node, ExecutionState *leftState,
   node->right =
       PTreeNodePtr(new PTreeNode(node, rightState, id), currentNodeTag);
   node->recalcDepth();
+  leftState->indexToNode[leftState->constraints.path().getCurrentIndex()] = leftState->ptreeNode;
+  rightState->indexToNode[rightState->constraints.path().getCurrentIndex()] = rightState->ptreeNode;
 }
 
 void PTree::remove(PTreeNode *n) {

@@ -263,6 +263,8 @@ private:
   ExecutionState(const ExecutionState &state);
 
 public:
+  std::unordered_map<Path::PathIndex, PTreeNode *, Path::PathIndexHash, Path::PathIndexEqual> indexToNode;
+
   using stack_ty = ExecutionStack;
 
   // Execution - Control Flow specific
