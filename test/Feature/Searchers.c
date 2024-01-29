@@ -25,6 +25,11 @@
 // RUN: %klee --output-dir=%t.klee-out --use-iterative-deepening-search=max-time --use-batching-search --search=nurs:depth %t2.bc
 // RUN: rm -rf %t.klee-out
 // RUN: %klee --output-dir=%t.klee-out --use-iterative-deepening-search=max-time --use-batching-search --search=nurs:qc %t2.bc
+// RUN: rm -rf %t.klee-out
+// RUN: timeout 10 %klee --output-dir=%t.klee-out --use-select-n-search %t2.bc
+// RUN: rm -rf %t.klee-out
+// RUN: timeout 10 %klee --output-dir=%t.klee-out --search=unsatisfiabilitys %t2.bc
+
 
 /* this test is basically just for coverage and doesn't really do any
    correctness check (aside from testing that the various combinations

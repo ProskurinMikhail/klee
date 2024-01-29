@@ -60,4 +60,30 @@ PartialValidity negatePartialValidity(PartialValidity pv) {
   }
 }
 
+PartialValidity pValidityEvaluation(ref<SolverResponse> queryRes, ref<SolverResponse> negativeQueryRes) {
+  PartialValidity result;
+   if (isa<ValidResponse>(queryRes) &&
+        isa<InvalidResponse>(negativeQueryRes)) {
+      result = PValidity::MustBeTrue;
+    } else if (isa<InvalidResponse>(queryRes) &&
+               isa<ValidResponse>(negativeQueryRes)) {
+      result = PValidity::MustBeFalse;
+    } else if (isa<InvalidResponse>(queryRes) &&
+               isa<InvalidResponse>(negativeQueryRes)) {
+      result = PValidity::TrueOrFalse;
+    } else if (isa<InvalidResponse>(queryRes) &&
+               isa<UnknownResponse>(negativeQueryRes)) {
+      result = PValidity::MayBeFalse;
+    } else if (isa<UnknownResponse>(queryRes) &&
+               isa<InvalidResponse>(negativeQueryRes)) {
+      result = PValidity::MayBeTrue;
+    } else if (isa<UnknownResponse>(queryRes) &&
+               isa<UnknownResponse>(negativeQueryRes)) {
+      result = PValidity::None;
+    } else {
+      assert(0 && "unreachable");
+    }
+    return result;
+}
+
 }; // namespace klee

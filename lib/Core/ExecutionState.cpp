@@ -158,7 +158,7 @@ ExecutionState::~ExecutionState() {
 }
 
 ExecutionState::ExecutionState(const ExecutionState &state)
-    : initPC(state.initPC), pc(state.pc), prevPC(state.prevPC),
+    : indexToNode(state.indexToNode), initPC(state.initPC), pc(state.pc), prevPC(state.prevPC),
       stack(state.stack), stackBalance(state.stackBalance),
       incomingBBIndex(state.incomingBBIndex), depth(state.depth),
       level(state.level), addressSpace(state.addressSpace),

@@ -38,11 +38,11 @@ public:
   PTreeNodePtr left;
   PTreeNodePtr right;
   ExecutionState *state = nullptr;
-  uint32_t treeDepth = 1;
+  std::uint32_t treeDepth = 1;
   std::optional<BranchType> branchReason;
   void recalcDepth ();
   std::uint32_t treeID;
-
+  std::uint32_t unsatisfiabilityRate = 0;
   PTreeNode(const PTreeNode &) = delete;
   PTreeNode(PTreeNode *parent, ExecutionState *state, std::uint32_t id);
   ~PTreeNode() = default;

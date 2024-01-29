@@ -781,3 +781,168 @@ void InterleavedSearcher::printName(llvm::raw_ostream &os) {
     searcher->printName(os);
   os << "</InterleavedSearcher>\n";
 }
+
+
+
+
+
+
+
+// .cpp SelectNSearcher
+SelectNSearcher::SelectNSearcher(Searcher *baseSearcher, int Num): baseSearcher{baseSearcher}, Num{Num} {}; 
+
+ExecutionState &SelectNSearcher::selectState() {
+  if (statesBuffer.size() == 0) {
+    for (int i = 0; (i < Num)&&(!baseSearcher->empty()); i++) {
+      statesBuffer.push_back(&baseSearcher->selectState());
+      baseSearcher->update(nullptr,{},{statesBuffer.back()});
+      //del state
+    }
+  // add states  
+      baseSearcher->update(nullptr,statesBuffer,{});
+      std::reverse(statesBuffer.begin(),statesBuffer.end());
+  }
+  ExecutionState * res = statesBuffer.back();
+  statesBuffer.pop_back();
+  return * res;
+}
+
+void SelectNSearcher::update(
+    ExecutionState *current, const std::vector<ExecutionState *> &addedStates,
+    const std::vector<ExecutionState *> &removedStates) {
+  // insert states
+  // states.insert(states.end(), addedStates.begin(), addedStates.end());
+  baseSearcher->update(current,addedStates,removedStates);
+
+  // remove states
+  for (const auto state : removedStates) {
+    auto it = std::find(statesBuffer.begin(), statesBuffer.end(), state);
+    //assert(it != states.end() && "invalid state removed");
+    if (it!=statesBuffer.end()){
+      statesBuffer.erase(it);
+    }
+  }
+}
+
+bool SelectNSearcher::empty() { return baseSearcher->empty(); }
+
+void SelectNSearcher::printName(llvm::raw_ostream &os) {
+  os << "SelectNSearcher\n" << Num << " Chanks was used per tic\n";
+}
+
+// .cpp2 WeightedRandomPathSearcher
+WeightedRandomPathSearcher::WeightedRandomPathSearcher(WeightType type, PForest &processForest, RNG &rng)
+    : type(type), processForest{processForest}, theRNG{rng},
+      idBitMask{processForest.getNextId()} {
+  switch (type) {
+  case Uniform:
+    break;
+  case TreeDepth:
+    break;
+  case Unsatisfiabilitys:
+    break;
+  default:
+    assert(0 && "invalid weight type");
+  }
+}
+
+ExecutionState &WeightedRandomPathSearcher::selectState() {
+  unsigned range = 0;
+  PTreeNodePtr *root = nullptr;
+  while (!root || !IS_OUR_NODE_VALID(*root))
+    root = &processForest.getPTrees()
+                .at(range++ % processForest.getPTrees().size() + 1)
+                ->root;
+  assert(root->getInt() & idBitMask && "Root should belong to the searcher");
+  PTreeNode *n = root->getPointer();
+  while (!n->state) {
+    if (!IS_OUR_NODE_VALID(n->left)) {
+      assert(IS_OUR_NODE_VALID(n->right) &&
+             "Both left and right nodes invalid");
+      assert(n != n->right.getPointer());
+      n = n->right.getPointer();
+    } else if (!IS_OUR_NODE_VALID(n->right)) {
+      assert(IS_OUR_NODE_VALID(n->left) && "Both right and left nodes invalid");
+      assert(n != n->left.getPointer());
+      n = n->left.getPointer();
+    } else {
+      double wLeft = getWeight((n->left).getPointer());
+      double wRight = getWeight((n->right).getPointer());
+      if (wLeft+wRight==0) { // make random choice in case of bouth weights are 0
+        n = theRNG.getBool() ? n->left.getPointer() : n->right.getPointer();
+      }
+      else {
+        n = ((theRNG.getDoubleL()*(wLeft+wRight)<wLeft) ? n->left : n->right).getPointer();
+      }
+    }
+  }
+  return *n->state;
+}
+
+double WeightedRandomPathSearcher::getWeight(PTreeNode *PTNode) {
+  switch (type) {
+  default:
+  case Uniform:
+    return 1.0;
+  case TreeDepth:
+    return PTNode->treeDepth;
+  case Unsatisfiabilitys:
+    return (PTNode->unsatisfiabilityRate) ? 1.0/(PTNode->unsatisfiabilityRate) : 1;
+}
+}
+
+void WeightedRandomPathSearcher::update(
+    ExecutionState *current, const std::vector<ExecutionState *> &addedStates,
+    const std::vector<ExecutionState *> &removedStates) {
+  // insert states
+  for (auto &es : addedStates) {
+    PTreeNode *pnode = es->ptreeNode, *parent = pnode->parent;
+    PTreeNodePtr &root = processForest.getPTrees().at(pnode->getTreeID())->root;
+    PTreeNodePtr *childPtr;
+
+    childPtr = parent ? ((parent->left.getPointer() == pnode) ? &parent->left
+                                                              : &parent->right)
+                      : &root;
+    while (pnode && !IS_OUR_NODE_VALID(*childPtr)) {
+      childPtr->setInt(childPtr->getInt() | idBitMask);
+      pnode = parent;
+      if (pnode)
+        parent = pnode->parent;
+
+      childPtr = parent
+                     ? ((parent->left.getPointer() == pnode) ? &parent->left
+                                                             : &parent->right)
+                     : &root;
+    }
+  }
+
+  // remove states
+  for (auto es : removedStates) {
+    PTreeNode *pnode = es->ptreeNode, *parent = pnode->parent;
+    PTreeNodePtr &root = processForest.getPTrees().at(pnode->getTreeID())->root;
+
+    while (pnode && !IS_OUR_NODE_VALID(pnode->left) &&
+           !IS_OUR_NODE_VALID(pnode->right)) {
+      auto childPtr =
+          parent ? ((parent->left.getPointer() == pnode) ? &parent->left
+                                                         : &parent->right)
+                 : &root;
+      assert(IS_OUR_NODE_VALID(*childPtr) && "Removing pTree child not ours");
+      childPtr->setInt(childPtr->getInt() & ~idBitMask);
+      pnode = parent;
+      if (pnode)
+        parent = pnode->parent;
+    }
+  }
+}
+
+bool WeightedRandomPathSearcher::empty() {
+  bool res = true;
+  for (const auto &ntree : processForest.getPTrees())
+    res = res && !IS_OUR_NODE_VALID(ntree.second->root);
+  return res;
+}
+
+void WeightedRandomPathSearcher::printName(llvm::raw_ostream &os) {
+  os << "RandomPathSearcher\n";
+}
