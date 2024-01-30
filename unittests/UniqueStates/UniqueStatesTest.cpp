@@ -13,7 +13,8 @@ TEST(UniqueStatesTest, DFS3) {
   int n = 3;
   SelectNSearcher sns(new DFSSearcher(),n);
   EXPECT_TRUE(sns.empty());
-  sns.update(nullptr,{&es1,&es2,&es3},{});
+  std::vector<ExecutionState *> addedStates = {&es1,&es2,&es3};
+  sns.update(nullptr,addedStates,{});
   ExecutionState *t1 = &sns.selectState();
   ExecutionState *t2 = &sns.selectState();
   ExecutionState *t3 = &sns.selectState();
