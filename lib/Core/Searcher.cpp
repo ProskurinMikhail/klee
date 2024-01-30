@@ -790,8 +790,8 @@ ExecutionState &SelectNSearcher::selectState() {
 }
 
 void SelectNSearcher::update(
-    ExecutionState *current, const std::vector<ExecutionState *> &addedStates,
-    const std::vector<ExecutionState *> &removedStates) {
+    ExecutionState *current, const StateIterable &addedStates,
+    const StateIterable &removedStates) {
   // insert states
   // states.insert(states.end(), addedStates.begin(), addedStates.end());
   baseSearcher->update(current,addedStates,removedStates);
@@ -874,10 +874,10 @@ double WeightedRandomPathSearcher::getWeight(PTreeNode *PTNode) {
 }
 
 void WeightedRandomPathSearcher::update(
-    ExecutionState *current, const std::vector<ExecutionState *> &addedStates,
-    const std::vector<ExecutionState *> &removedStates) {
+    ExecutionState *current, const StateIterable &addedStates,
+    const StateIterable &removedStates) {
   // insert states
-  for (auto &es : addedStates) {
+  for (const auto &es : addedStates) {
     PTreeNode *pnode = es->ptreeNode, *parent = pnode->parent;
     PTreeNodePtr &root = processForest.getPTrees().at(pnode->getTreeID())->root;
     PTreeNodePtr *childPtr;
@@ -899,7 +899,7 @@ void WeightedRandomPathSearcher::update(
   }
 
   // remove states
-  for (auto es : removedStates) {
+  for (const auto es : removedStates) {
     PTreeNode *pnode = es->ptreeNode, *parent = pnode->parent;
     PTreeNodePtr &root = processForest.getPTrees().at(pnode->getTreeID())->root;
 
