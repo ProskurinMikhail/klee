@@ -42,7 +42,7 @@ public:
   std::optional<BranchType> branchReason;
   void recalcDepth ();
   std::uint32_t treeID;
-  std::uint32_t unsatisfiabilityRate = 0;
+  std::uint32_t unsatisfiabilityRate = 1;
   PTreeNode(const PTreeNode &) = delete;
   PTreeNode(PTreeNode *parent, ExecutionState *state, std::uint32_t id);
   ~PTreeNode() = default;
