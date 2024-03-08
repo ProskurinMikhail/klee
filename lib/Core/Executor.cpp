@@ -1337,12 +1337,8 @@ Executor::StatePair Executor::fork(ExecutionState &current, ref<Expr> condition,
     ref<SolverResponse> curResponse;
     if (shouldCheckFalseBlock) {
       // only solver->check-sat(!condition)
-      success = solver->getResponse(current.constraints.cs(), condition,
-                                   curResponse, current.queryMetaData);
-      if (auto validResponse = dyn_cast<ValidResponse>(curResponse)) {
-        unsatisfiabilitysCounter(validResponse, current);
-      }
-      mayBeFalse = isa<InvalidResponse>(curResponse);
+      success = solver->mayBeFalse(current.constraints.cs(), condition,
+                                mayBeFalse, current.queryMetaData);
     }
     if (!success || !mayBeFalse)
       terminateEverything = true;
@@ -1350,14 +1346,9 @@ Executor::StatePair Executor::fork(ExecutionState &current, ref<Expr> condition,
       res = PartialValidity::MayBeFalse;
   } else if (!shouldCheckFalseBlock) {
     bool mayBeTrue;
-    ref<SolverResponse> curResponse;
-    success = solver->getResponse(current.constraints.cs(), Expr::createIsZero(condition),
-                               curResponse, current.queryMetaData);    
-    if (auto validResponse = dyn_cast<ValidResponse>(curResponse)) {
-        unsatisfiabilitysCounter(validResponse, current);                             
-    }
-    mayBeTrue = isa<InvalidResponse>(curResponse);
-    if (!success && !mayBeTrue)
+    success = solver->mayBeTrue(current.constraints.cs(), condition, mayBeTrue,
+                                current.queryMetaData);
+    if (!success || !mayBeTrue)
       terminateEverything = true;
     else
       res = PartialValidity::MayBeTrue;
@@ -1371,25 +1362,30 @@ Executor::StatePair Executor::fork(ExecutionState &current, ref<Expr> condition,
   if (res != PartialValidity::None)
     success = true;
   else {
-    ref<SolverResponse> queryResult;
-    ref<SolverResponse> negatedQueryResult;
-    success = solver->evaluate(current.constraints.cs(), condition, queryResult, negatedQueryResult, current.queryMetaData);
-    if (success) {
-      res = pValidityEvaluation(queryResult, negatedQueryResult);
-      if (auto validResponse = dyn_cast<ValidResponse>(queryResult)) {
-        unsatisfiabilitysCounter(validResponse, current);                             
-      }
-      else if (auto validResponse = dyn_cast<ValidResponse>(negatedQueryResult)) {
-        unsatisfiabilitysCounter(validResponse, current);                             
-      }
-    }
-    
+    success = solver->evaluate(current.constraints.cs(), condition, res,
+                                current.queryMetaData);
   }
+
   solver->setTimeout(time::Span());
   if (!success) {
     current.pc = current.prevPC;
     terminateStateOnSolverError(current, "Query timed out (fork).");
     return StatePair(nullptr, nullptr);
+  }
+
+  if (res == PValidity::MustBeTrue || res == PValidity::MustBeFalse) {
+    ref<SolverResponse> curResponse;
+    bool success = false;
+    if (res == PValidity::MustBeTrue) {
+      success = solver->getResponse(current.constraints.cs(), condition,
+                                    curResponse, current.queryMetaData);
+    } else {
+      success = solver->getResponse(current.constraints.cs(), Expr::createIsZero(condition),
+                                    curResponse, current.queryMetaData);
+    }
+    if (auto validResponse = dyn_cast<ValidResponse>(curResponse)) {
+        unsatisfiabilitysCounter(validResponse, current);
+    }
   }
 
   if (!isSeeding) {
@@ -1403,7 +1399,6 @@ Executor::StatePair Executor::fork(ExecutionState &current, ref<Expr> condition,
       } else if (res == PValidity::MustBeFalse) {
         assert(!branch && "hit invalid branch in replay path mode");
       } else {
-        // add constraints
         if (branch) {
           res = PValidity::MustBeTrue;
           addConstraint(current, condition);
