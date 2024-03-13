@@ -21,6 +21,7 @@
 #include "klee/Support/CompilerWarning.h"
 DISABLE_WARNING_PUSH
 DISABLE_WARNING_DEPRECATED_DECLARATIONS
+#include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/Hashing.h"
 #if LLVM_VERSION_CODE >= LLVM_VERSION(13, 0)
@@ -2017,6 +2018,9 @@ static ref<Expr> AndExpr_createPartialR(const ref<ConstantExpr> &cl, Expr *r) {
   return AndExpr_createPartial(r, cl);
 }
 static ref<Expr> AndExpr_create(Expr *l, Expr *r) {
+  if (*l == *r) {
+    return l;
+  }
   return AndExpr::alloc(l, r);
 }
 
@@ -2032,7 +2036,12 @@ static ref<Expr> OrExpr_createPartial(Expr *l, const ref<ConstantExpr> &cr) {
 static ref<Expr> OrExpr_createPartialR(const ref<ConstantExpr> &cl, Expr *r) {
   return OrExpr_createPartial(r, cl);
 }
-static ref<Expr> OrExpr_create(Expr *l, Expr *r) { return OrExpr::alloc(l, r); }
+static ref<Expr> OrExpr_create(Expr *l, Expr *r) {
+  if (*l == *r) {
+    return l;
+  }
+  return OrExpr::alloc(l, r);
+}
 
 static ref<Expr> XorExpr_createPartialR(const ref<ConstantExpr> &cl, Expr *r) {
   if (cl->isZero()) {

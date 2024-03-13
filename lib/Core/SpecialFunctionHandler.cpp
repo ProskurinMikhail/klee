@@ -9,6 +9,7 @@
 
 #include "SpecialFunctionHandler.h"
 
+#include "CodeEvent.h"
 #include "ExecutionState.h"
 #include "Executor.h"
 #include "Memory.h"
@@ -31,6 +32,7 @@
 #include "klee/Support/CompilerWarning.h"
 DISABLE_WARNING_PUSH
 DISABLE_WARNING_DEPRECATED_DECLARATIONS
+#include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Instructions.h"
@@ -112,6 +114,7 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
 #endif
     add("klee_is_symbolic", handleIsSymbolic, true),
     add("klee_make_symbolic", handleMakeSymbolic, false),
+    add("klee_make_mock", handleMakeMock, false),
     add("klee_mark_global", handleMarkGlobal, false),
     add("klee_prefer_cex", handlePreferCex, false),
     add("klee_posix_prefer_cex", handlePosixPreferCex, false),
@@ -339,8 +342,9 @@ void SpecialFunctionHandler::handleAbort(ExecutionState &state,
                                          KInstruction *target,
                                          std::vector<ref<Expr>> &arguments) {
   assert(arguments.size() == 0 && "invalid number of arguments to abort");
-  executor.terminateStateOnProgramError(state, "abort failure",
-                                        StateTerminationType::Abort);
+  executor.terminateStateOnProgramError(
+      state, new ErrorEvent(executor.locationOf(state),
+                            StateTerminationType::Abort, "abort failure"));
 }
 
 void SpecialFunctionHandler::handleExit(ExecutionState &state,
@@ -362,8 +366,10 @@ void SpecialFunctionHandler::handleAssert(ExecutionState &state,
                                           std::vector<ref<Expr>> &arguments) {
   assert(arguments.size() == 3 && "invalid number of arguments to _assert");
   executor.terminateStateOnProgramError(
-      state, "ASSERTION FAIL: " + readStringAtAddress(state, arguments[0]),
-      StateTerminationType::Assert);
+      state,
+      new ErrorEvent(executor.locationOf(state), StateTerminationType::Assert,
+                     "ASSERTION FAIL: " +
+                         readStringAtAddress(state, arguments[0])));
 }
 
 void SpecialFunctionHandler::handleAssertFail(
@@ -372,8 +378,10 @@ void SpecialFunctionHandler::handleAssertFail(
   assert(arguments.size() == 4 &&
          "invalid number of arguments to __assert_fail");
   executor.terminateStateOnProgramError(
-      state, "ASSERTION FAIL: " + readStringAtAddress(state, arguments[0]),
-      StateTerminationType::Assert);
+      state,
+      new ErrorEvent(executor.locationOf(state), StateTerminationType::Assert,
+                     "ASSERTION FAIL: " +
+                         readStringAtAddress(state, arguments[0])));
 }
 
 void SpecialFunctionHandler::handleReportError(
@@ -384,9 +392,11 @@ void SpecialFunctionHandler::handleReportError(
 
   // arguments[0,1,2,3] are file, line, message, suffix
   executor.terminateStateOnProgramError(
-      state, readStringAtAddress(state, arguments[2]),
-      StateTerminationType::ReportError, "",
-      readStringAtAddress(state, arguments[3]).c_str());
+      state,
+      new ErrorEvent(executor.locationOf(state),
+                     StateTerminationType::ReportError,
+                     readStringAtAddress(state, arguments[2])),
+      "", readStringAtAddress(state, arguments[3]).c_str());
 }
 
 void SpecialFunctionHandler::handleNew(ExecutionState &state,
@@ -827,7 +837,9 @@ void SpecialFunctionHandler::handleCheckMemoryAccess(
             cast<ConstantExpr>(address),
             executor.typeSystemManager->getUnknownType(), idObject)) {
       executor.terminateStateOnProgramError(
-          state, "check_memory_access: memory error", StateTerminationType::Ptr,
+          state,
+          new ErrorEvent(executor.locationOf(state), StateTerminationType::Ptr,
+                         "check_memory_access: memory error"),
           executor.getAddressInfo(state, address));
     } else {
       const MemoryObject *mo = state.addressSpace.findObject(idObject).first;
@@ -835,8 +847,11 @@ void SpecialFunctionHandler::handleCheckMemoryAccess(
           address, cast<ConstantExpr>(size)->getZExtValue());
       if (!chk->isTrue()) {
         executor.terminateStateOnProgramError(
-            state, "check_memory_access: memory error",
-            StateTerminationType::Ptr, executor.getAddressInfo(state, address));
+            state,
+            new ErrorEvent(
+                new AllocEvent(mo->allocSite), executor.locationOf(state),
+                StateTerminationType::Ptr, "check_memory_access: memory error"),
+            executor.getAddressInfo(state, address));
       }
     }
   }
@@ -864,7 +879,7 @@ void SpecialFunctionHandler::handleDefineFixedObject(
   uint64_t address = cast<ConstantExpr>(arguments[0])->getZExtValue();
   uint64_t size = cast<ConstantExpr>(arguments[1])->getZExtValue();
   MemoryObject *mo =
-      executor.memory->allocateFixed(address, size, state.prevPC->inst());
+      executor.memory->allocateFixed(address, size, executor.locationOf(state));
   executor.bindObjectInState(
       state, mo, executor.typeSystemManager->getUnknownType(), false);
   mo->isUserSpecified = true; // XXX hack;
@@ -933,6 +948,83 @@ void SpecialFunctionHandler::handleMakeSymbolic(
     } else {
       executor.terminateStateOnUserError(
           *s, "Wrong size given to klee_make_symbolic");
+    }
+  }
+}
+
+void SpecialFunctionHandler::handleMakeMock(ExecutionState &state,
+                                            KInstruction *target,
+                                            std::vector<ref<Expr>> &arguments) {
+  std::string name;
+
+  if (arguments.size() != 3) {
+    executor.terminateStateOnUserError(state,
+                                       "Incorrect number of arguments to "
+                                       "klee_make_mock(void*, size_t, char*)");
+    return;
+  }
+
+  name = arguments[2]->isZero() ? "" : readStringAtAddress(state, arguments[2]);
+
+  if (name.empty()) {
+    executor.terminateStateOnUserError(
+        state, "Empty name of function in klee_make_mock");
+    return;
+  }
+
+  KFunction *kf = target->parent->parent;
+
+  Executor::ExactResolutionList rl;
+  executor.resolveExact(state, arguments[0],
+                        executor.typeSystemManager->getUnknownType(), rl,
+                        "make_symbolic");
+
+  for (auto &it : rl) {
+    ObjectPair op = it.second->addressSpace.findObject(it.first);
+    const MemoryObject *mo = op.first;
+    mo->setName(name);
+    mo->updateTimestamp();
+
+    const ObjectState *old = op.second;
+    ExecutionState *s = it.second;
+
+    if (old->readOnly) {
+      executor.terminateStateOnUserError(
+          *s, "cannot make readonly object symbolic");
+      return;
+    }
+
+    bool res;
+    bool success __attribute__((unused)) = executor.solver->mustBeTrue(
+        s->constraints.cs(),
+        EqExpr::create(
+            ZExtExpr::create(arguments[1], Context::get().getPointerWidth()),
+            mo->getSizeExpr()),
+        res, s->queryMetaData);
+    assert(success && "FIXME: Unhandled solver failure");
+
+    if (res) {
+      ref<SymbolicSource> source;
+      switch (executor.interpreterOpts.MockStrategy) {
+      case MockStrategyKind::Naive:
+        source =
+            SourceBuilder::mockNaive(executor.kmodule.get(), *kf->function(),
+                                     executor.updateNameVersion(state, name));
+        break;
+      case MockStrategyKind::Deterministic:
+        std::vector<ref<Expr>> args(kf->getNumArgs());
+        for (size_t i = 0; i < kf->getNumArgs(); i++) {
+          args[i] = executor.getArgumentCell(state, kf, i).value;
+        }
+        source = SourceBuilder::mockDeterministic(executor.kmodule.get(),
+                                                  *kf->function(), args);
+        break;
+      }
+      executor.executeMakeSymbolic(state, mo, old->getDynamicType(), source,
+                                   false);
+    } else {
+      executor.terminateStateOnUserError(*s,
+                                         "Wrong size given to klee_make_mock");
     }
   }
 }

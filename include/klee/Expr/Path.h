@@ -33,6 +33,19 @@ public:
     }
   };
 
+  struct PathIndexEqual {
+    bool operator()(const PathIndex &a, const PathIndex &b) const {
+      return a.block == b.block && a.instruction == b.instruction;
+    }
+  };
+
+  struct PathIndexHash {
+    unsigned operator()(const PathIndex &a) const {
+      static const unsigned MAGIC_HASH_CONSTANT = 39;
+      return a.block * MAGIC_HASH_CONSTANT + a.instruction;
+    }
+  };
+
   struct BlockRange {
     unsigned long first;
     unsigned long last;

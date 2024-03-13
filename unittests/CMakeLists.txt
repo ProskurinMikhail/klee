@@ -272,6 +272,7 @@ function(add_klee_unit_test target_name)
 endfunction()
 
 # Unit Tests
+add_subdirectory(Annotations)
 add_subdirectory(Assignment)
 add_subdirectory(Expr)
 add_subdirectory(Ref)
@@ -281,6 +282,7 @@ add_subdirectory(TreeStream)
 add_subdirectory(DiscretePDF)
 add_subdirectory(Time)
 add_subdirectory(RNG)
+add_subdirectory(UniqueStates)
 
 # Set up lit configuration
 set (UNIT_TEST_EXE_SUFFIX "Test")

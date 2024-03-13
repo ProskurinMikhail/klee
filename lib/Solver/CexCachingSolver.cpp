@@ -134,8 +134,8 @@ struct isValidOrSatisfyingResponse {
 
   bool operator()(ref<SolverResponse> a) const {
     return isa<ValidResponse>(a) ||
-           (isa<InvalidResponse>(a) &&
-            cast<InvalidResponse>(a)->satisfiesOrConstant(key));
+    (isa<InvalidResponse>(a) &&
+    cast<InvalidResponse>(a)->satisfiesOrConstant(key));
   }
 };
 

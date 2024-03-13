@@ -52,7 +52,8 @@ cl::list<Searcher::CoreSearchType> CoreSearch(
                    "use NURS with Instr-Count"),
         clEnumValN(Searcher::NURS_CPICnt, "nurs:cpicnt",
                    "use NURS with CallPath-Instr-Count"),
-        clEnumValN(Searcher::NURS_QC, "nurs:qc", "use NURS with Query-Cost")),
+        clEnumValN(Searcher::NURS_QC, "nurs:qc", "use NURS with Query-Cost"),
+        clEnumValN(Searcher::WeightedRandomPath, "unsatisfiabilitys", "unsatisfiabilitys")), 
     cl::cat(SearchCat));
 
 cl::opt<HaltExecution::Reason> UseIterativeDeepeningSearch(
@@ -86,12 +87,24 @@ cl::opt<std::string> BatchTime(
              "--use-batching-search.  Set to 0s to disable (default=5s)"),
     cl::init("5s"), cl::cat(SearchCat));
 
+cl::opt<bool> UseSelectNSearch(
+    "use-select-n-search",
+    cl::desc(
+        "blabla"),
+    cl::init(false), cl::cat(SearchCat));
+cl::opt<unsigned> SelectNBufferSize(
+    "select-n-buffer-size",
+    cl::desc("balbal2"),
+    cl::init(5), cl::cat(SearchCat));
+  
+
 } // namespace
 
 void klee::initializeSearchOptions() {
   // default values
   if (CoreSearch.empty()) {
     CoreSearch.push_back(Searcher::RandomPath);
+    //CoreSearch.push_back(Searcher::WeightedRandomPath);
     CoreSearch.push_back(Searcher::NURS_CovNew);
   }
 }
@@ -151,8 +164,12 @@ Searcher *getNewSearcher(Searcher::CoreSearchType type, RNG &rng,
     searcher =
         new WeightedRandomSearcher(WeightedRandomSearcher::QueryCost, rng);
     break;
+  case Searcher::WeightedRandomPath:
+    searcher =
+        new WeightedRandomPathSearcher(WeightedRandomPathSearcher::Unsatisfiabilitys, processForest, rng);
+    break;
   }
-
+                        
   return searcher;
 }
 
@@ -178,21 +195,19 @@ Searcher *klee::constructUserSearcher(Executor &executor,
                                     BatchInstructions);
   }
 
-  TargetManagerSubscriber *tms = nullptr;
   if (executor.guidanceKind != Interpreter::GuidanceKind::NoGuidance) {
     searcher = new GuidedSearcher(searcher, *executor.distanceCalculator,
-                                  executor.theRNG);
-    tms = static_cast<GuidedSearcher *>(searcher);
+                                  *executor.targetManager, executor.theRNG);
+  }
+  
+  if (UseSelectNSearch) {
+    searcher = new SelectNSearcher(searcher,SelectNBufferSize);
   }
 
   if (UseIterativeDeepeningSearch != HaltExecution::Reason::Unspecified) {
-    searcher = new IterativeDeepeningSearcher(searcher, tms,
-                                              UseIterativeDeepeningSearch);
-    tms = static_cast<IterativeDeepeningSearcher *>(searcher);
+    searcher =
+        new IterativeDeepeningSearcher(searcher, UseIterativeDeepeningSearch);
   }
-
-  if (tms)
-    executor.targetManager->subscribe(*tms);
 
   llvm::raw_ostream &os = executor.getHandler().getInfoStream();
 

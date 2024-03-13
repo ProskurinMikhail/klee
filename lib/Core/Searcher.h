@@ -63,8 +63,9 @@ public:
   /// \param current The currently selected state for exploration.
   /// \param addedStates The newly branched states with `current` as common
   /// ancestor. \param removedStates The states that will be terminated.
-  virtual void update(ExecutionState *current, const StateIterable &addedStates,
-                      const StateIterable &removedStates) = 0;
+  virtual void update(ExecutionState *current,
+                      const std::vector<ExecutionState *> &addedStates,
+                      const std::vector<ExecutionState *> &removedStates) = 0;
 
   /// \return True if no state left for exploration, False otherwise
   virtual bool empty() = 0;
@@ -84,7 +85,8 @@ public:
     NURS_RP,
     NURS_ICnt,
     NURS_CPICnt,
-    NURS_QC
+    NURS_QC,
+    WeightedRandomPath
   };
 };
 
@@ -95,8 +97,9 @@ class DFSSearcher final : public Searcher {
 
 public:
   ExecutionState &selectState() override;
-  void update(ExecutionState *current, const StateIterable &addedStates,
-              const StateIterable &removedStates) override;
+  void update(ExecutionState *current,
+              const std::vector<ExecutionState *> &addedStates,
+              const std::vector<ExecutionState *> &removedStates) override;
   bool empty() override;
   void printName(llvm::raw_ostream &os) override;
 };
@@ -110,8 +113,9 @@ class BFSSearcher final : public Searcher {
 
 public:
   ExecutionState &selectState() override;
-  void update(ExecutionState *current, const StateIterable &addedStates,
-              const StateIterable &removedStates) override;
+  void update(ExecutionState *current,
+              const std::vector<ExecutionState *> &addedStates,
+              const std::vector<ExecutionState *> &removedStates) override;
   bool empty() override;
   void printName(llvm::raw_ostream &os) override;
 };
@@ -124,8 +128,9 @@ class RandomSearcher final : public Searcher {
 public:
   explicit RandomSearcher(RNG &rng);
   ExecutionState &selectState() override;
-  void update(ExecutionState *current, const StateIterable &addedStates,
-              const StateIterable &removedStates) override;
+  void update(ExecutionState *current,
+              const std::vector<ExecutionState *> &addedStates,
+              const std::vector<ExecutionState *> &removedStates) override;
   bool empty() override;
   void printName(llvm::raw_ostream &os) override;
 };
@@ -144,13 +149,14 @@ public:
   ~TargetedSearcher() override;
 
   ExecutionState &selectState() override;
-  void update(ExecutionState *current, const StateIterable &addedStates,
-              const StateIterable &removedStates) override;
+  void update(ExecutionState *current,
+              const std::vector<ExecutionState *> &addedStates,
+              const std::vector<ExecutionState *> &removedStates) override;
   bool empty() override;
   void printName(llvm::raw_ostream &os) override;
 };
 
-class GuidedSearcher final : public Searcher, public TargetManagerSubscriber {
+class GuidedSearcher final : public Searcher {
   template <class T>
   using TargetHistoryTargetPairHashMap =
       std::unordered_map<TargetHistoryTargetPair, T, TargetHistoryTargetHash,
@@ -167,6 +173,7 @@ class GuidedSearcher final : public Searcher, public TargetManagerSubscriber {
   std::unique_ptr<Searcher> baseSearcher;
   TargetHistoryTargetPairToSearcherMap targetedSearchers;
   DistanceCalculator &distanceCalculator;
+  TargetManager &targetManager;
   RNG &theRNG;
   unsigned index{1};
   bool interleave = true;
@@ -176,6 +183,7 @@ class GuidedSearcher final : public Searcher, public TargetManagerSubscriber {
   std::vector<ExecutionState *> baseRemovedStates;
   TargetHistoryTargetPairToStatesMap addedTStates;
   TargetHistoryTargetPairToStatesMap removedTStates;
+  states_ty localStates;
 
   TargetHashSet removedTargets;
   TargetHashSet addedTargets;
@@ -188,15 +196,15 @@ class GuidedSearcher final : public Searcher, public TargetManagerSubscriber {
 
 public:
   GuidedSearcher(Searcher *baseSearcher, DistanceCalculator &distanceCalculator,
-                 RNG &rng)
+                 TargetManager &targetManager, RNG &rng)
       : baseSearcher(baseSearcher), distanceCalculator(distanceCalculator),
-        theRNG(rng) {}
+        targetManager(targetManager), theRNG(rng) {}
   ~GuidedSearcher() override = default;
   ExecutionState &selectState() override;
-  void update(ExecutionState *current, const StateIterable &addedStates,
-              const StateIterable &removedStates) override;
-  void update(const TargetHistoryTargetPairToStatesMap &added,
-              const TargetHistoryTargetPairToStatesMap &removed) override;
+  void update(ExecutionState *current,
+              const std::vector<ExecutionState *> &addedStates,
+              const std::vector<ExecutionState *> &removedStates) override;
+  void update(const states_ty &states);
   void updateTargets(ExecutionState *current);
 
   bool empty() override;
@@ -233,8 +241,9 @@ public:
   ~WeightedRandomSearcher() override = default;
 
   ExecutionState &selectState() override;
-  void update(ExecutionState *current, const StateIterable &addedStates,
-              const StateIterable &removedStates) override;
+  void update(ExecutionState *current,
+              const std::vector<ExecutionState *> &addedStates,
+              const std::vector<ExecutionState *> &removedStates) override;
   bool empty() override;
   void printName(llvm::raw_ostream &os) override;
 };
@@ -269,8 +278,9 @@ public:
   ~RandomPathSearcher() override = default;
 
   ExecutionState &selectState() override;
-  void update(ExecutionState *current, const StateIterable &addedStates,
-              const StateIterable &removedStates) override;
+  void update(ExecutionState *current,
+              const std::vector<ExecutionState *> &addedStates,
+              const std::vector<ExecutionState *> &removedStates) override;
   bool empty() override;
   void printName(llvm::raw_ostream &os) override;
 };
@@ -302,8 +312,9 @@ public:
   ~BatchingSearcher() override = default;
 
   ExecutionState &selectState() override;
-  void update(ExecutionState *current, const StateIterable &addedStates,
-              const StateIterable &removedStates) override;
+  void update(ExecutionState *current,
+              const std::vector<ExecutionState *> &addedStates,
+              const std::vector<ExecutionState *> &removedStates) override;
   bool empty() override;
   void printName(llvm::raw_ostream &os) override;
 };
@@ -313,8 +324,7 @@ public:
 /// limit, it is paused (removed from underlying searcher). When the underlying
 /// searcher runs out of states, the metric limit is increased and all paused
 /// states are revived (added to underlying searcher).
-class IterativeDeepeningSearcher final : public Searcher,
-                                         public TargetManagerSubscriber {
+class IterativeDeepeningSearcher final : public Searcher {
 public:
   struct Metric {
     virtual ~Metric() = default;
@@ -325,22 +335,22 @@ public:
 
 private:
   std::unique_ptr<Searcher> baseSearcher;
-  TargetManagerSubscriber *tms;
   std::unique_ptr<Metric> metric;
-  std::set<ExecutionState *> pausedStates;
+  states_ty pausedStates;
+  StatesVector activeRemovedStates;
+
+  void updateAndFilter(const StatesVector &states, StatesVector &result);
 
 public:
   /// \param baseSearcher The underlying searcher (takes ownership).
   explicit IterativeDeepeningSearcher(Searcher *baseSearcher,
-                                      TargetManagerSubscriber *tms,
                                       HaltExecution::Reason metric);
   ~IterativeDeepeningSearcher() override = default;
 
   ExecutionState &selectState() override;
-  void update(ExecutionState *current, const StateIterable &addedStates,
-              const StateIterable &removedStates) override;
-  void update(const TargetHistoryTargetPairToStatesMap &added,
-              const TargetHistoryTargetPairToStatesMap &removed) override;
+  void update(ExecutionState *current,
+              const std::vector<ExecutionState *> &addedStates,
+              const std::vector<ExecutionState *> &removedStates) override;
   bool empty() override;
   void printName(llvm::raw_ostream &os) override;
 };
@@ -358,11 +368,60 @@ public:
   ~InterleavedSearcher() override = default;
 
   ExecutionState &selectState() override;
-  void update(ExecutionState *current, const StateIterable &addedStates,
+  void update(ExecutionState *current,
+              const std::vector<ExecutionState *> &addedStates,
+              const std::vector<ExecutionState *> &removedStates) override;
+  bool empty() override;
+  void printName(llvm::raw_ostream &os) override;
+};
+
+// .h
+class SelectNSearcher final : public Searcher {
+  std::unique_ptr<Searcher> baseSearcher;
+  std::vector<ExecutionState *> statesBuffer;
+  // std::vector<ExecutionState *> states;
+  int Num;
+  
+public:
+  explicit SelectNSearcher(Searcher *baseSearcher, int Num);
+    ~SelectNSearcher() override = default;
+  ExecutionState &selectState() override;
+  void update(ExecutionState *current,
+              const StateIterable &addedStates,
               const StateIterable &removedStates) override;
   bool empty() override;
   void printName(llvm::raw_ostream &os) override;
 };
+ 
+
+// .h2
+class WeightedRandomPathSearcher final : public Searcher {
+  public:
+  enum WeightType : std::uint8_t {
+    Uniform,  // all weights == 1
+    TreeDepth, 
+    Unsatisfiabilitys,
+  };
+private:
+  WeightType type;
+  PForest &processForest;
+  RNG &theRNG;
+  const uint8_t idBitMask;
+  bool updateWeights;
+  double getWeight(PTreeNode *);
+public:
+  /// \param processTree The process tree.
+  /// \param RNG A random number generator.
+  WeightedRandomPathSearcher(WeightType type, PForest &processForest, RNG &rng);
+  ~WeightedRandomPathSearcher() override = default;
+  ExecutionState &selectState() override;
+  void update(ExecutionState *current,
+              const StateIterable &addedStates,
+              const StateIterable &removedStates) override;
+  bool empty() override;
+  void printName(llvm::raw_ostream &os) override;
+};
+
 
 } // namespace klee
 
