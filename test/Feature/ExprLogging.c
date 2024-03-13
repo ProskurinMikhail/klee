@@ -1,4 +1,3 @@
-// XFAIL: *
 // RUN: %clang %s -emit-llvm -g %O0opt -c -o %t1.bc
 // We disable the cex-cache to eliminate nondeterminism across different solvers, in particular when counting the number of queries in the last two commands
 // RUN: rm -rf %t.klee-out

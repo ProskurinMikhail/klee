@@ -66,7 +66,6 @@ public:
   TargetHashSet calculate(ExecutionState &state);
 
   bool isCovered(KFunction *kf) const;
-  bool uncoveredBlockPredicate(KBlock *kblock);
 
 private:
   CodeGraphInfo &codeGraphInfo;
@@ -77,6 +76,8 @@ private:
 
   const std::map<KBlock *, std::set<unsigned>> &
   getCoverageTargets(KFunction *kf);
+
+  bool uncoveredBlockPredicate(ExecutionState *state, KBlock *kblock);
 };
 } // namespace klee
 

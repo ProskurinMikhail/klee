@@ -19,18 +19,8 @@ const Array *AlphaBuilder::visitArray(const Array *arr) {
   if (!reverse && alphaArrayMap.find(arr) == alphaArrayMap.end()) {
     ref<SymbolicSource> source = arr->source;
     ref<Expr> size = visit(arr->getSize());
-    if (ref<MockDeterministicSource> mockSource =
-            dyn_cast_or_null<MockDeterministicSource>(source)) {
-      std::vector<ref<Expr>> args;
-      for (const auto &it : mockSource->args) {
-        args.push_back(visit(it));
-      }
-      source = SourceBuilder::mockDeterministic(mockSource->km,
-                                                mockSource->function, args);
-      alphaArrayMap[arr] = arrayCache.CreateArray(
-          size, source, arr->getDomain(), arr->getRange());
-      reverseAlphaArrayMap[alphaArrayMap[arr]] = arr;
-    } else if (!arr->isConstantArray()) {
+
+    if (!arr->isConstantArray()) {
       source = SourceBuilder::alpha(index);
       index++;
       alphaArrayMap[arr] = arrayCache.CreateArray(
@@ -79,9 +69,9 @@ ExprVisitor::Action AlphaBuilder::visitRead(const ReadExpr &re) {
 
 AlphaBuilder::AlphaBuilder(ArrayCache &_arrayCache) : arrayCache(_arrayCache) {}
 
-constraints_ty AlphaBuilder::visitConstraints(const constraints_ty &cs) {
+constraints_ty AlphaBuilder::visitConstraints(constraints_ty cs) {
   constraints_ty result;
-  for (const auto &arg : cs) {
+  for (auto arg : cs) {
     ref<Expr> v = visit(arg);
     reverseExprMap[v] = arg;
     reverseExprMap[Expr::createIsZero(v)] = Expr::createIsZero(arg);
@@ -89,7 +79,6 @@ constraints_ty AlphaBuilder::visitConstraints(const constraints_ty &cs) {
   }
   return result;
 }
-
 ref<Expr> AlphaBuilder::build(ref<Expr> v) {
   ref<Expr> e = visit(v);
   reverseExprMap[e] = v;

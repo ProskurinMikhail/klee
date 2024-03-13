@@ -381,8 +381,6 @@ public:
 
   KBlock *getKBlock(const llvm::BasicBlock *bb);
 
-  bool inMainModule(const llvm::Instruction &i);
-
   bool inMainModule(const llvm::Function &f);
 
   bool inMainModule(const llvm::GlobalVariable &v);

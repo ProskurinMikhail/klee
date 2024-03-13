@@ -10,12 +10,10 @@ add_library(kleeCore
   AddressManager.cpp
   AddressSpace.cpp
   CallPathManager.cpp
-  CodeLocation.cpp
   Context.cpp
   CoreStats.cpp
   CXXTypeSystem/CXXTypeManager.cpp
   DistanceCalculator.cpp
-  EventRecorder.cpp
   ExecutionState.cpp
   Executor.cpp
   ExecutorUtil.cpp
@@ -24,7 +22,6 @@ add_library(kleeCore
   Memory.cpp
   MemoryManager.cpp
   PForest.cpp
-  MockBuilder.cpp
   PTree.cpp
   Searcher.cpp
   SeedInfo.cpp

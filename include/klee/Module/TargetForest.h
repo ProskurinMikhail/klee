@@ -293,10 +293,9 @@ private:
     }
 
     void dump(unsigned n) const;
-    void pullConfidences(
+    void addLeafs(
         std::vector<std::pair<ref<UnorderedTargetsSet>, confidence::ty>> &leafs,
         confidence::ty parentConfidence) const;
-    void pullLeafs(std::vector<ref<Target>> &leafs) const;
     void propagateConfidenceToChildren();
     ref<Layer> deepCopy();
     Layer *copy();
@@ -358,8 +357,7 @@ public:
   const TargetHashSet getTargets() const { return forest->getTargets(); }
   void dump() const;
   std::vector<std::pair<ref<UnorderedTargetsSet>, confidence::ty>>
-  confidences() const;
-  std::set<ref<Target>> leafs() const;
+  leafs() const;
   ref<TargetForest> deepCopy();
   void divideConfidenceBy(unsigned factor) {
     forest->divideConfidenceBy(factor);

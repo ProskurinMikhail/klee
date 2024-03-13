@@ -20,26 +20,6 @@ using namespace klee;
 
 namespace klee {} // namespace klee
 
-void TargetManager::pullGlobal(ExecutionState &state) {
-  if (!isTargeted(state) || targets(state).size() == 0) {
-    return;
-  }
-
-  auto &stateTargetForest = targetForest(state);
-
-  for (auto &target : stateTargetForest.leafs()) {
-    if (reachedTargets.count(target)) {
-      stateTargetForest.block(target);
-    }
-  }
-  setTargets(state, stateTargetForest.getTargets());
-  if (guidance == Interpreter::GuidanceKind::CoverageGuidance) {
-    if (targets(state).size() == 0) {
-      state.setTargeted(false);
-    }
-  }
-}
-
 void TargetManager::updateMiss(ExecutionState &state, ref<Target> target) {
   auto &stateTargetForest = targetForest(state);
   stateTargetForest.remove(target);
@@ -63,7 +43,20 @@ void TargetManager::updateDone(ExecutionState &state, ref<Target> target) {
       target->shouldFailOnThisTarget()) {
     if (target->shouldFailOnThisTarget() ||
         !isa<KCallBlock>(target->getBlock())) {
-      setReached(target);
+      reachedTargets.insert(target);
+    }
+
+    for (auto es : states) {
+      if (isTargeted(*es)) {
+        auto &esTargetForest = targetForest(*es);
+        esTargetForest.block(target);
+        setTargets(*es, esTargetForest.getTargets());
+        if (guidance == Interpreter::GuidanceKind::CoverageGuidance) {
+          if (targets(*es).size() == 0) {
+            es->setTargeted(false);
+          }
+        }
+      }
     }
   }
   if (guidance == Interpreter::GuidanceKind::CoverageGuidance) {
@@ -113,27 +106,6 @@ void TargetManager::collect(ExecutionState &state) {
   }
 }
 
-void TargetManager::collectFiltered(
-    const StatesSet &filter, TargetHistoryTargetPairToStatesMap &added,
-    TargetHistoryTargetPairToStatesMap &removed) {
-  for (auto htStatesPair : addedTStates) {
-    for (auto &state : htStatesPair.second) {
-      if (filter.count(state)) {
-        added[htStatesPair.first].push_back(state);
-        removed[htStatesPair.first];
-      }
-    }
-  }
-  for (auto htStatesPair : removedTStates) {
-    for (auto &state : htStatesPair.second) {
-      if (filter.count(state)) {
-        removed[htStatesPair.first].push_back(state);
-        added[htStatesPair.first];
-      }
-    }
-  }
-}
-
 void TargetManager::updateReached(ExecutionState &state) {
   auto prevKI = state.prevPC;
   auto kf = prevKI->parent->parent;
@@ -144,10 +116,6 @@ void TargetManager::updateReached(ExecutionState &state) {
     ref<Target> target;
 
     if (state.getPrevPCBlock()->getTerminator()->getNumSuccessors() == 0) {
-      target = ReachBlockTarget::create(state.prevPC->parent, true);
-    } else if (isa<KCallBlock>(state.prevPC->parent) &&
-               !targetCalculator.uncoveredBlockPredicate(
-                   state.prevPC->parent)) {
       target = ReachBlockTarget::create(state.prevPC->parent, true);
     } else if (!isa<KCallBlock>(state.prevPC->parent)) {
       unsigned index = 0;
@@ -161,8 +129,6 @@ void TargetManager::updateReached(ExecutionState &state) {
     }
 
     if (target && guidance == Interpreter::GuidanceKind::CoverageGuidance) {
-      setReached(target);
-      target = ReachBlockTarget::create(state.pc->parent, false);
       setReached(target);
     }
   }
@@ -237,21 +203,28 @@ void TargetManager::update(ExecutionState *current,
     }
   }
 
-  for (auto &pair : addedTStates) {
-    pair.second.clear();
-  }
-  for (auto &pair : removedTStates) {
-    pair.second.clear();
-  }
-
   for (auto state : changedStates) {
-    collect(*state);
+    if (std::find(addedStates.begin(), addedStates.end(), state) ==
+        addedStates.end()) {
+      collect(*state);
+    }
     state->stepTargetsAndHistory();
   }
 
   for (const auto state : removedStates) {
     states.erase(state);
     distances.erase(state);
+  }
+
+  for (auto subscriber : subscribers) {
+    subscriber->update(addedTStates, removedTStates);
+  }
+
+  for (auto &pair : addedTStates) {
+    pair.second.clear();
+  }
+  for (auto &pair : removedTStates) {
+    pair.second.clear();
   }
 
   changedStates.clear();
@@ -282,11 +255,6 @@ bool TargetManager::isReachedTarget(const ExecutionState &state,
         } else {
           result = Continue;
         }
-        return true;
-      }
-    } else {
-      if (state.pc->parent == target->getBlock()) {
-        result = Done;
         return true;
       }
     }

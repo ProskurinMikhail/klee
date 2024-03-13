@@ -81,7 +81,7 @@ size_t KInstruction::getLine() const {
 
 size_t KInstruction::getColumn() const {
   auto locationInfo = getLocationInfo(inst());
-  return locationInfo.column.value_or(0);
+  return locationInfo.column;
 }
 
 std::string KInstruction::getSourceFilepath() const {

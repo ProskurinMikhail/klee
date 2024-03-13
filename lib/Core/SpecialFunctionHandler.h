@@ -127,7 +127,6 @@ public:
   HANDLER(handleGetValue);
   HANDLER(handleIsSymbolic);
   HANDLER(handleMakeSymbolic);
-  HANDLER(handleMakeMock);
   HANDLER(handleMalloc);
   HANDLER(handleMemalign);
   HANDLER(handleMarkGlobal);

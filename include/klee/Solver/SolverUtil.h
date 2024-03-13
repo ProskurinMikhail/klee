@@ -339,9 +339,5 @@ PartialValidity toPartial(Validity v);
 
 PartialValidity negatePartialValidity(PartialValidity pv);
 
-PartialValidity pValidityEvaluation(ref<SolverResponse> queryRes, ref<SolverResponse> negativeQueryRes);
-
-
-
 }; // namespace klee
 #endif

@@ -13,7 +13,6 @@
 #include "MemoryManager.h"
 #include "klee/Core/Context.h"
 
-#include "CodeLocation.h"
 #include "klee/ADT/BitArray.h"
 #include "klee/Expr/ArrayCache.h"
 #include "klee/Expr/Assignment.h"
@@ -50,29 +49,26 @@ MemoryObject::~MemoryObject() {
     parent->markFreed(this);
 }
 
-std::string MemoryObject::getAllocInfo() const {
-  std::string result;
+void MemoryObject::getAllocInfo(std::string &result) const {
   llvm::raw_string_ostream info(result);
 
   info << "MO" << id << "[" << size << "]";
 
-  if (allocSite && allocSite->source) {
-    const llvm::Value *allocSiteSource = allocSite->source->unwrap();
+  if (allocSite) {
     info << " allocated at ";
-    if (const Instruction *i = dyn_cast<Instruction>(allocSiteSource)) {
+    if (const Instruction *i = dyn_cast<Instruction>(allocSite)) {
       info << i->getParent()->getParent()->getName() << "():";
       info << *i;
-    } else if (const GlobalValue *gv = dyn_cast<GlobalValue>(allocSiteSource)) {
+    } else if (const GlobalValue *gv = dyn_cast<GlobalValue>(allocSite)) {
       info << "global:" << gv->getName();
     } else {
-      info << "value:" << *allocSiteSource;
+      info << "value:" << *allocSite;
     }
   } else {
     info << " (no allocation info)";
   }
 
   info.flush();
-  return result;
 }
 
 /***/
@@ -173,7 +169,8 @@ ref<Expr> ObjectState::read8(ref<Expr> offset) const {
   flushForRead();
 
   if (object && object->size > 4096) {
-    std::string allocInfo = object->getAllocInfo();
+    std::string allocInfo;
+    object->getAllocInfo(allocInfo);
     klee_warning_once(
         nullptr,
         "Symbolic memory access will send the following array of %d bytes to "
@@ -206,7 +203,8 @@ void ObjectState::write8(ref<Expr> offset, ref<Expr> value) {
   flushForWrite();
 
   if (object && object->size > 4096) {
-    std::string allocInfo = object->getAllocInfo();
+    std::string allocInfo;
+    object->getAllocInfo(allocInfo);
     klee_warning_once(
         nullptr,
         "Symbolic memory access will send the following array of %d bytes to "

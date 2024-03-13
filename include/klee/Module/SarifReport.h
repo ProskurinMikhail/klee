@@ -17,8 +17,8 @@
 #include <vector>
 
 #include "klee/ADT/Ref.h"
-#include "nlohmann/json.hpp"
 #include "llvm/IR/Function.h"
+#include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
 
@@ -58,11 +58,6 @@ std::string getErrorsString(const std::vector<ReachWithError> &errors);
 
 struct FunctionInfo;
 struct KBlock;
-struct LocationInfo;
-
-struct Message {
-  std::string text;
-};
 
 struct ArtifactLocationJson {
   std::optional<std::string> uri;
@@ -81,7 +76,6 @@ struct PhysicalLocationJson {
 };
 
 struct LocationJson {
-  std::optional<Message> message;
   std::optional<PhysicalLocationJson> physicalLocation;
 };
 
@@ -98,6 +92,10 @@ struct CodeFlowJson {
   std::vector<ThreadFlowJson> threadFlows;
 };
 
+struct Message {
+  std::string text;
+};
+
 struct Fingerprints {
   std::string cooddy_uid;
 };
@@ -112,7 +110,6 @@ static void from_json(const json &j, Fingerprints &p) {
 
 struct ResultJson {
   std::optional<std::string> ruleId;
-  std::optional<std::string> level;
   std::optional<Message> message;
   std::optional<unsigned> id;
   std::optional<Fingerprints> fingerprints;
@@ -120,17 +117,8 @@ struct ResultJson {
   std::vector<CodeFlowJson> codeFlows;
 };
 
-struct RuleJson {
-  std::string id;
-  std::optional<std::string> name;
-  std::optional<Message> shortDescription;
-  std::optional<std::string> helpUri;
-};
-
 struct DriverJson {
   std::string name;
-  std::optional<std::string> informationUri;
-  std::vector<RuleJson> rules;
 };
 
 struct ToolJson {
@@ -143,12 +131,8 @@ struct RunJson {
 };
 
 struct SarifReportJson {
-  std::string version;
   std::vector<RunJson> runs;
 };
-
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(RuleJson, id, name,
-                                                shortDescription, helpUri)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ArtifactLocationJson, uri)
 
@@ -158,8 +142,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(RegionJson, startLine, endLine,
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(PhysicalLocationJson,
                                                 artifactLocation, region)
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(LocationJson, message,
-                                                physicalLocation)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(LocationJson, physicalLocation)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ThreadFlowLocationJson,
                                                 location, metadata)
@@ -170,18 +153,17 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(CodeFlowJson, threadFlows)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Message, text)
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ResultJson, ruleId, level,
-                                                message, id, fingerprints,
-                                                codeFlows, locations)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ResultJson, ruleId, message, id,
+                                                fingerprints, codeFlows,
+                                                locations)
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(DriverJson, name,
-                                                informationUri, rules)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(DriverJson, name)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ToolJson, driver)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(RunJson, results, tool)
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(SarifReportJson, version, runs)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(SarifReportJson, runs)
 
 struct Location {
   struct LocationHash {

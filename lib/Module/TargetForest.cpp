@@ -550,51 +550,26 @@ void TargetForest::dump() const {
   forest->dump(1);
 }
 
-void TargetForest::Layer::pullConfidences(
-    std::vector<std::pair<ref<UnorderedTargetsSet>, confidence::ty>>
-        &confidences,
+void TargetForest::Layer::addLeafs(
+    std::vector<std::pair<ref<UnorderedTargetsSet>, confidence::ty>> &leafs,
     confidence::ty parentConfidence) const {
   for (const auto &targetAndForest : forest) {
     auto targetsVec = targetAndForest.first;
     auto layer = targetAndForest.second;
     auto confidence = layer->getConfidence(parentConfidence);
     if (layer->empty()) {
-      confidences.push_back(std::make_pair(targetsVec, confidence));
+      leafs.push_back(std::make_pair(targetsVec, confidence));
     } else {
-      layer->pullConfidences(confidences, confidence);
-    }
-  }
-}
-
-void TargetForest::Layer::pullLeafs(std::vector<ref<Target>> &leafs) const {
-  for (const auto &targetAndForest : forest) {
-    auto layer = targetAndForest.second;
-    if (layer->empty()) {
-      for (auto &targetVect : targetsToVector) {
-        leafs.push_back(targetVect.first);
-      }
-    } else {
-      layer->pullLeafs(leafs);
+      layer->addLeafs(leafs, confidence);
     }
   }
 }
 
 std::vector<std::pair<ref<TargetForest::UnorderedTargetsSet>, confidence::ty>>
-TargetForest::confidences() const {
-  std::vector<std::pair<ref<UnorderedTargetsSet>, confidence::ty>> confidences;
-  forest->pullConfidences(confidences, forest->getConfidence());
-  return confidences;
-}
-
-std::set<ref<Target>> TargetForest::leafs() const {
-  std::vector<ref<Target>> leafs;
-  forest->pullLeafs(leafs);
-
-  std::set<ref<Target>> targets;
-  for (auto &leaf : leafs) {
-    targets.insert(leaf);
-  }
-  return targets;
+TargetForest::leafs() const {
+  std::vector<std::pair<ref<UnorderedTargetsSet>, confidence::ty>> leafs;
+  forest->addLeafs(leafs, forest->getConfidence());
+  return leafs;
 }
 
 ref<TargetForest> TargetForest::deepCopy() {

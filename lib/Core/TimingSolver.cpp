@@ -51,8 +51,29 @@ bool TimingSolver::evaluate(const ConstraintSet &constraints, ref<Expr> expr,
                      : solver->evaluate(query, result);
 
   if (success && produceValidityCore) {
-    result = pValidityEvaluation(queryResult, negatedQueryResult);
+    if (isa<ValidResponse>(queryResult) &&
+        isa<InvalidResponse>(negatedQueryResult)) {
+      result = PValidity::MustBeTrue;
+    } else if (isa<InvalidResponse>(queryResult) &&
+               isa<ValidResponse>(negatedQueryResult)) {
+      result = PValidity::MustBeFalse;
+    } else if (isa<InvalidResponse>(queryResult) &&
+               isa<InvalidResponse>(negatedQueryResult)) {
+      result = PValidity::TrueOrFalse;
+    } else if (isa<InvalidResponse>(queryResult) &&
+               isa<UnknownResponse>(negatedQueryResult)) {
+      result = PValidity::MayBeFalse;
+    } else if (isa<UnknownResponse>(queryResult) &&
+               isa<InvalidResponse>(negatedQueryResult)) {
+      result = PValidity::MayBeTrue;
+    } else if (isa<UnknownResponse>(queryResult) &&
+               isa<UnknownResponse>(negatedQueryResult)) {
+      result = PValidity::None;
+    } else {
+      assert(0 && "unreachable");
+    }
   }
+
   metaData.queryCost += timer.delta();
 
   return success;

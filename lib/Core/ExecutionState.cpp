@@ -22,7 +22,6 @@
 #include "klee/Support/CompilerWarning.h"
 DISABLE_WARNING_PUSH
 DISABLE_WARNING_DEPRECATED_DECLARATIONS
-#include "llvm/ADT/APFloat.h"
 #include "llvm/IR/Function.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
@@ -31,8 +30,10 @@ DISABLE_WARNING_POP
 #include <cassert>
 #include <fstream>
 #include <iomanip>
+#include <map>
 #include <set>
 #include <sstream>
+#include <stdarg.h>
 #include <string>
 
 using namespace llvm;
@@ -158,14 +159,14 @@ ExecutionState::~ExecutionState() {
 }
 
 ExecutionState::ExecutionState(const ExecutionState &state)
-    : indexToNode(state.indexToNode), initPC(state.initPC), pc(state.pc), prevPC(state.prevPC),
+    : initPC(state.initPC), pc(state.pc), prevPC(state.prevPC),
       stack(state.stack), stackBalance(state.stackBalance),
       incomingBBIndex(state.incomingBBIndex), depth(state.depth),
       level(state.level), addressSpace(state.addressSpace),
-      constraints(state.constraints), eventsRecorder(state.eventsRecorder),
-      targetForest(state.targetForest), pathOS(state.pathOS),
-      symPathOS(state.symPathOS), coveredLines(state.coveredLines),
-      symbolics(state.symbolics), resolvedPointers(state.resolvedPointers),
+      constraints(state.constraints), targetForest(state.targetForest),
+      pathOS(state.pathOS), symPathOS(state.symPathOS),
+      coveredLines(state.coveredLines), symbolics(state.symbolics),
+      resolvedPointers(state.resolvedPointers),
       cexPreferences(state.cexPreferences), arrayNames(state.arrayNames),
       steppedInstructions(state.steppedInstructions),
       steppedMemoryInstructions(state.steppedMemoryInstructions),
@@ -189,8 +190,6 @@ ExecutionState *ExecutionState::branch() {
   auto *falseState = new ExecutionState(*this);
   falseState->setID();
   falseState->coveredLines.clear();
-  falseState->prevTargets_ = falseState->targets_;
-  falseState->prevHistory_ = falseState->history_;
 
   return falseState;
 }

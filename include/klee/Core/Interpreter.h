@@ -10,7 +10,6 @@
 #define KLEE_INTERPRETER_H
 
 #include "TerminationTypes.h"
-#include "klee/Module/Annotation.h"
 
 #include "klee/Module/SarifReport.h"
 
@@ -30,7 +29,6 @@ class BasicBlock;
 class Function;
 class LLVMContext;
 class Module;
-class Type;
 class raw_ostream;
 class raw_fd_ostream;
 } // namespace llvm
@@ -38,7 +36,6 @@ class raw_fd_ostream;
 namespace klee {
 class ExecutionState;
 struct SarifReport;
-struct ToolJson;
 class Interpreter;
 class TreeStreamWriter;
 
@@ -58,8 +55,6 @@ public:
 
   virtual void processTestCase(const ExecutionState &state, const char *message,
                                const char *suffix, bool isError = false) = 0;
-
-  virtual ToolJson info() const = 0;
 };
 
 /// [File][Line][Column] -> Opcode
@@ -67,23 +62,6 @@ using FLCtoOpcode = std::unordered_map<
     std::string,
     std::unordered_map<
         unsigned, std::unordered_map<unsigned, std::unordered_set<unsigned>>>>;
-
-enum class MockStrategyKind {
-  Naive,        // For each function call new symbolic value is generated
-  Deterministic // Each function is treated as uninterpreted function in SMT.
-                // Compatible with Z3 solver only
-};
-
-enum class MockPolicy {
-  None,   // No mock function generated
-  Failed, // Generate symbolic value for failed external calls
-  All     // Generate IR module with all external values
-};
-
-enum class MockMutableGlobalsPolicy {
-  None, // No mock for globals
-  All,  // Mock globals on module build stage and generate bc module for it
-};
 
 class Interpreter {
 public:
@@ -101,32 +79,21 @@ public:
     std::string LibraryDir;
     std::string EntryPoint;
     std::string OptSuffix;
-    std::string MainCurrentName;
-    std::string MainNameAfterMock;
-    std::string AnnotationsFile;
     bool Optimize;
     bool Simplify;
     bool CheckDivZero;
     bool CheckOvershift;
-    bool AnnotateOnlyExternal;
     bool WithFPRuntime;
     bool WithPOSIXRuntime;
 
     ModuleOptions(const std::string &_LibraryDir,
                   const std::string &_EntryPoint, const std::string &_OptSuffix,
-                  const std::string &_MainCurrentName,
-                  const std::string &_MainNameAfterMock,
-                  const std::string &_AnnotationsFile, bool _Optimize,
-                  bool _Simplify, bool _CheckDivZero, bool _CheckOvershift,
-                  bool _AnnotateOnlyExternal, bool _WithFPRuntime,
+                  bool _Optimize, bool _Simplify, bool _CheckDivZero,
+                  bool _CheckOvershift, bool _WithFPRuntime,
                   bool _WithPOSIXRuntime)
         : LibraryDir(_LibraryDir), EntryPoint(_EntryPoint),
-          OptSuffix(_OptSuffix), MainCurrentName(_MainCurrentName),
-          MainNameAfterMock(_MainNameAfterMock),
-          AnnotationsFile(_AnnotationsFile), Optimize(_Optimize),
-          Simplify(_Simplify), CheckDivZero(_CheckDivZero),
-          CheckOvershift(_CheckOvershift),
-          AnnotateOnlyExternal(_AnnotateOnlyExternal),
+          OptSuffix(_OptSuffix), Optimize(_Optimize), Simplify(_Simplify),
+          CheckDivZero(_CheckDivZero), CheckOvershift(_CheckOvershift),
           WithFPRuntime(_WithFPRuntime), WithPOSIXRuntime(_WithPOSIXRuntime) {}
   };
 
@@ -145,15 +112,10 @@ public:
     unsigned MakeConcreteSymbolic;
     GuidanceKind Guidance;
     std::optional<SarifReport> Paths;
-    MockPolicy Mock;
-    MockStrategyKind MockStrategy;
-    MockMutableGlobalsPolicy MockMutableGlobals;
 
     InterpreterOptions(std::optional<SarifReport> Paths)
         : MakeConcreteSymbolic(false), Guidance(GuidanceKind::NoGuidance),
-          Paths(std::move(Paths)), Mock(MockPolicy::None),
-          MockStrategy(MockStrategyKind::Naive),
-          MockMutableGlobals(MockMutableGlobalsPolicy::None) {}
+          Paths(std::move(Paths)) {}
   };
 
 protected:
@@ -176,13 +138,13 @@ public:
   ///                module
   /// \return The final module after it has been optimized, checks
   /// inserted, and modified for interpretation.
-  virtual llvm::Module *setModule(
-      std::vector<std::unique_ptr<llvm::Module>> &userModules,
-      std::vector<std::unique_ptr<llvm::Module>> &libsModules,
-      const ModuleOptions &opts, std::set<std::string> &&mainModuleFunctions,
-      std::set<std::string> &&mainModuleGlobals, FLCtoOpcode &&origInstructions,
-      const std::set<std::string> &ignoredExternals,
-      std::vector<std::pair<std::string, std::string>> redefinitions) = 0;
+  virtual llvm::Module *
+  setModule(std::vector<std::unique_ptr<llvm::Module>> &userModules,
+            std::vector<std::unique_ptr<llvm::Module>> &libsModules,
+            const ModuleOptions &opts,
+            std::set<std::string> &&mainModuleFunctions,
+            std::set<std::string> &&mainModuleGlobals,
+            FLCtoOpcode &&origInstructions) = 0;
 
   // supply a tree stream writer which the interpreter will use
   // to record the concrete path (as a stream of '0' and '1' bytes).
@@ -230,10 +192,6 @@ public:
                                 LogType logFormat = STP) = 0;
 
   virtual bool getSymbolicSolution(const ExecutionState &state, KTest &res) = 0;
-
-  virtual void addSARIFReport(const ExecutionState &state) = 0;
-
-  virtual SarifReportJson getSARIFReport() const = 0;
 
   virtual void logState(const ExecutionState &state, int id,
                         std::unique_ptr<llvm::raw_fd_ostream> &f) = 0;

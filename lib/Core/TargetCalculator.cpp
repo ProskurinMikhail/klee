@@ -36,23 +36,6 @@ void TargetCalculator::update(const ExecutionState &state) {
   Function *initialFunction = state.getInitPCBlock()->getParent();
 
   if (state.prevPC == state.prevPC->parent->getLastInstruction() &&
-      !fullyCoveredFunctions.count(state.pc->parent->parent)) {
-    auto &fBranches = getCoverageTargets(state.pc->parent->parent);
-    if (!coveredFunctionsInBranches.count(state.pc->parent->parent)) {
-      if (fBranches.count(state.pc->parent) != 0) {
-        if (!coveredBranches[state.pc->parent->parent].count(
-                state.pc->parent)) {
-          coveredBranches[state.pc->parent->parent][state.pc->parent];
-        }
-      }
-    }
-    if (getCoverageTargets(state.pc->parent->parent) ==
-        coveredBranches[state.pc->parent->parent]) {
-      coveredFunctionsInBranches.insert(state.pc->parent->parent);
-    }
-  }
-
-  if (state.prevPC == state.prevPC->parent->getLastInstruction() &&
       !fullyCoveredFunctions.count(state.prevPC->parent->parent)) {
     auto &fBranches = getCoverageTargets(state.prevPC->parent->parent);
 
@@ -164,7 +147,9 @@ TargetCalculator::getCoverageTargets(KFunction *kf) {
   }
 }
 
-bool TargetCalculator::uncoveredBlockPredicate(KBlock *kblock) {
+bool TargetCalculator::uncoveredBlockPredicate(ExecutionState *state,
+                                               KBlock *kblock) {
+  Function *initialFunction = state->getInitPCBlock()->getParent();
   bool result = false;
 
   auto &fBranches = getCoverageTargets(kblock->parent);
@@ -211,7 +196,7 @@ TargetHashSet TargetCalculator::calculate(ExecutionState &state) {
     std::set<KBlock *> blocks;
     using std::placeholders::_1;
     KBlockPredicate func =
-        std::bind(&TargetCalculator::uncoveredBlockPredicate, this, _1);
+        std::bind(&TargetCalculator::uncoveredBlockPredicate, this, &state, _1);
     codeGraphInfo.getNearestPredicateSatisfying(kb, func, blocks);
 
     if (!blocks.empty()) {

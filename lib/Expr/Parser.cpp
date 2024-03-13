@@ -331,8 +331,6 @@ class ParserImpl : public Parser {
   SourceResult ParseLazyInitializationSizeSource();
   SourceResult ParseInstructionSource();
   SourceResult ParseArgumentSource();
-  SourceResult ParseMockNaiveSource();
-  SourceResult ParseMockDeterministicSource();
   SourceResult ParseAlphaSource();
 
   /*** Diagnostics ***/
@@ -503,12 +501,6 @@ SourceResult ParserImpl::ParseSource() {
   } else if (type == "argument") {
     assert(km);
     source = ParseArgumentSource();
-  } else if (type == "mockNaive") {
-    assert(km);
-    source = ParseMockNaiveSource();
-  } else if (type == "mockDeterministic") {
-    assert(km);
-    source = ParseMockDeterministicSource();
   } else if (type == "alpha") {
     source = ParseAlphaSource();
   } else {
@@ -637,34 +629,6 @@ SourceResult ParserImpl::ParseInstructionSource() {
   auto KB = KF->getLabelMap().at(Label.getString());
   auto KI = KB->instructions[KIIndex];
   return SourceBuilder::instruction(*KI->inst(), index, km);
-}
-
-SourceResult ParserImpl::ParseMockNaiveSource() {
-  auto name = Tok.getString();
-  auto kf = km->functionNameMap[name];
-  ConsumeExpectedToken(Token::Identifier);
-  auto versionExpr = ParseNumber(64).get();
-  auto version = dyn_cast<ConstantExpr>(versionExpr);
-  assert(version);
-  return SourceBuilder::mockNaive(km, *kf->function(), version->getZExtValue());
-}
-
-SourceResult ParserImpl::ParseMockDeterministicSource() {
-  auto name = Tok.getString();
-  auto kf = km->functionNameMap[name];
-  ConsumeExpectedToken(Token::Identifier);
-  ConsumeLParen();
-  std::vector<ref<Expr>> args;
-  args.reserve(kf->getNumArgs());
-  for (unsigned i = 0; i < kf->getNumArgs(); i++) {
-    auto expr = ParseExpr(TypeResult());
-    if (!expr.isValid()) {
-      return {false, nullptr};
-    }
-    args.push_back(expr.get());
-  }
-  ConsumeRParen();
-  return SourceBuilder::mockDeterministic(km, *kf->function(), args);
 }
 
 SourceResult ParserImpl::ParseAlphaSource() {

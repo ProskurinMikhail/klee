@@ -20,13 +20,11 @@ DISABLE_WARNING_POP
 
 namespace klee {
 
-class Expr;
 class Array;
 class Expr;
 class ConstantExpr;
 struct KGlobalVariable;
 class KModule;
-struct KFunction;
 struct KValue;
 struct KInstruction;
 
@@ -50,8 +48,6 @@ public:
     Instruction,
     Argument,
     Irreproducible,
-    MockNaive,
-    MockDeterministic,
     Alpha
   };
 
@@ -361,8 +357,8 @@ public:
   const unsigned index;
 
   AlphaSource(unsigned _index) : index(_index) {}
-  [[nodiscard]] Kind getKind() const override { return Kind::Alpha; }
-  [[nodiscard]] virtual std::string getName() const override { return "alpha"; }
+  Kind getKind() const override { return Kind::Alpha; }
+  virtual std::string getName() const override { return "alpha"; }
 
   static bool classof(const SymbolicSource *S) {
     return S->getKind() == Kind::Alpha;
@@ -385,62 +381,6 @@ public:
     }
     return 0;
   }
-};
-
-class MockSource : public SymbolicSource {
-public:
-  const KModule *km;
-  const llvm::Function &function;
-  MockSource(const KModule *_km, const llvm::Function &_function)
-      : km(_km), function(_function) {}
-
-  static bool classof(const SymbolicSource *S) {
-    return S->getKind() == Kind::MockNaive ||
-           S->getKind() == Kind::MockDeterministic;
-  }
-};
-
-class MockNaiveSource : public MockSource {
-public:
-  const unsigned version;
-
-  MockNaiveSource(const KModule *km, const llvm::Function &function,
-                  unsigned _version)
-      : MockSource(km, function), version(_version) {}
-
-  [[nodiscard]] Kind getKind() const override { return Kind::MockNaive; }
-  [[nodiscard]] std::string getName() const override { return "mockNaive"; }
-
-  static bool classof(const SymbolicSource *S) {
-    return S->getKind() == Kind::MockNaive;
-  }
-
-  unsigned computeHash() override;
-
-  [[nodiscard]] int internalCompare(const SymbolicSource &b) const override;
-};
-
-class MockDeterministicSource : public MockSource {
-public:
-  const std::vector<ref<Expr>> args;
-
-  MockDeterministicSource(const KModule *_km, const llvm::Function &_function,
-                          const std::vector<ref<Expr>> &_args);
-
-  [[nodiscard]] Kind getKind() const override {
-    return Kind::MockDeterministic;
-  }
-  [[nodiscard]] std::string getName() const override {
-    return "mockDeterministic";
-  }
-
-  static bool classof(const SymbolicSource *S) {
-    return S->getKind() == Kind::MockDeterministic;
-  }
-
-  unsigned computeHash() override;
-
-  [[nodiscard]] int internalCompare(const SymbolicSource &b) const override;
 };
 
 } // namespace klee
