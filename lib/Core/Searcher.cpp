@@ -808,8 +808,8 @@ ExecutionState &SelectNSearcher::selectState() {
 }
 
 void SelectNSearcher::update(
-    ExecutionState *current, const StateIterable &addedStates,
-    const StateIterable &removedStates) {
+    ExecutionState *current, const std::vector<ExecutionState *>  &addedStates,
+    const std::vector<ExecutionState *>  &removedStates) {
   // insert states
   // states.insert(states.end(), addedStates.begin(), addedStates.end());
   baseSearcher->update(current,addedStates,removedStates);
@@ -892,8 +892,8 @@ double WeightedRandomPathSearcher::getWeight(PTreeNode *PTNode) {
 }
 
 void WeightedRandomPathSearcher::update(
-    ExecutionState *current, const StateIterable &addedStates,
-    const StateIterable &removedStates) {
+    ExecutionState *current, const std::vector<ExecutionState *> &addedStates,
+    const std::vector<ExecutionState *> &removedStates) {
   // insert states
   for (const auto &es : addedStates) {
     PTreeNode *pnode = es->ptreeNode, *parent = pnode->parent;

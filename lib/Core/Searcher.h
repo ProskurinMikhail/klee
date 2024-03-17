@@ -387,8 +387,8 @@ public:
     ~SelectNSearcher() override = default;
   ExecutionState &selectState() override;
   void update(ExecutionState *current,
-              const StateIterable &addedStates,
-              const StateIterable &removedStates) override;
+              const std::vector<ExecutionState *> &addedStates,
+              const std::vector<ExecutionState *> &removedStates) override;
   bool empty() override;
   void printName(llvm::raw_ostream &os) override;
 };
@@ -416,8 +416,8 @@ public:
   ~WeightedRandomPathSearcher() override = default;
   ExecutionState &selectState() override;
   void update(ExecutionState *current,
-              const StateIterable &addedStates,
-              const StateIterable &removedStates) override;
+              const std::vector<ExecutionState *>  &addedStates,
+              const std::vector<ExecutionState *>  &removedStates) override;
   bool empty() override;
   void printName(llvm::raw_ostream &os) override;
 };
