@@ -306,6 +306,11 @@ cl::opt<bool>
                                   "querying the solver (default=true)"),
                          cl::cat(SolvingCat));
 
+cl::opt<bool> MinimizeConflict(
+    "minimize-conflict", cl::init(false),
+    cl::desc("Minimizing conflicts by using validityCores (default=false)"),
+    cl::cat(SolvingCat));
+
 /*** External call policy options ***/
 
 enum class ExternalCallPolicy {
@@ -488,9 +493,9 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
                    InterpreterHandler *ih)
     : Interpreter(opts), interpreterHandler(ih), searcher(nullptr),
       externalDispatcher(new ExternalDispatcher(ctx)), statsTracker(0),
-      pathWriter(0), symPathWriter(0),
-      specialFunctionHandler(0), timers{time::Span(TimerInterval)},
-      guidanceKind(opts.Guidance), codeGraphInfo(new CodeGraphInfo()),
+      pathWriter(0), symPathWriter(0), specialFunctionHandler(0),
+      timers{time::Span(TimerInterval)}, guidanceKind(opts.Guidance),
+      codeGraphInfo(new CodeGraphInfo()),
       distanceCalculator(new DistanceCalculator(*codeGraphInfo)),
       targetCalculator(new TargetCalculator(*codeGraphInfo)),
       targetManager(new TargetManager(guidanceKind, *distanceCalculator,
@@ -1278,9 +1283,11 @@ bool Executor::canReachSomeTargetFromBlock(ExecutionState &es, KBlock *block) {
   return false;
 }
 
-std::vector<Path::PathIndex> Executor::corePathConstraintsIndexes(const ValidityCore &core, const PathConstraints &path) {
+std::vector<Path::PathIndex>
+Executor::corePathConstraintsIndexes(const ValidityCore &core,
+                                     const PathConstraints &path) {
   std::vector<Path::PathIndex> res;
-  for (auto &constraint: core.constraints) {  
+  for (auto &constraint : core.constraints) {
     auto pIndexIt = path.indexes().find(constraint);
     if (pIndexIt != path.indexes().end()) {
       res.push_back(pIndexIt->second);
@@ -1290,9 +1297,11 @@ std::vector<Path::PathIndex> Executor::corePathConstraintsIndexes(const Validity
   return res;
 }
 
-std::vector<PTreeNode *> Executor::corePathConstraintsNodes(const std::vector<Path::PathIndex> &pIndexes, const ExecutionState &state) {
+std::vector<PTreeNode *>
+Executor::corePathConstraintsNodes(const std::vector<Path::PathIndex> &pIndexes,
+                                   const ExecutionState &state) {
   std::vector<PTreeNode *> res;
-  for (auto &i: pIndexes) {
+  for (auto &i : pIndexes) {
     auto curNode = state.indexToNode.find(i);
     if (curNode != state.indexToNode.end()) {
       res.push_back(curNode->second);
@@ -1301,11 +1310,13 @@ std::vector<PTreeNode *> Executor::corePathConstraintsNodes(const std::vector<Pa
   return res;
 }
 
-void Executor::unsatisfiabilitysCounter(ref<klee::ValidResponse> validResponse, ExecutionState &current) {
-  std::vector<Path::PathIndex> pIndex = corePathConstraintsIndexes(validResponse->validityCore(), current.constraints);
+void Executor::unsatisfiabilitysCounter(ref<klee::ValidResponse> validResponse,
+                                        ExecutionState &current) {
+  std::vector<Path::PathIndex> pIndex = corePathConstraintsIndexes(
+      validResponse->validityCore(), current.constraints);
   std::vector<PTreeNode *> pTNode = corePathConstraintsNodes(pIndex, current);
-  for (unsigned i = 0; i<pTNode.size(); ++i) {
-    pTNode[i]->unsatisfiabilityRate += i+1;
+  for (unsigned i = 0; i < pTNode.size(); ++i) {
+    pTNode[i]->unsatisfiabilityRate += i + 1;
   }
 }
 
@@ -1338,7 +1349,7 @@ Executor::StatePair Executor::fork(ExecutionState &current, ref<Expr> condition,
     if (shouldCheckFalseBlock) {
       // only solver->check-sat(!condition)
       success = solver->mayBeFalse(current.constraints.cs(), condition,
-                                mayBeFalse, current.queryMetaData);
+                                   mayBeFalse, current.queryMetaData);
     }
     if (!success || !mayBeFalse)
       terminateEverything = true;
@@ -1363,7 +1374,7 @@ Executor::StatePair Executor::fork(ExecutionState &current, ref<Expr> condition,
     success = true;
   else {
     success = solver->evaluate(current.constraints.cs(), condition, res,
-                                current.queryMetaData);
+                               current.queryMetaData);
   }
 
   solver->setTimeout(time::Span());
@@ -1373,18 +1384,31 @@ Executor::StatePair Executor::fork(ExecutionState &current, ref<Expr> condition,
     return StatePair(nullptr, nullptr);
   }
 
+  // mixa117 add switch between versions
   if (res == PValidity::MustBeTrue || res == PValidity::MustBeFalse) {
     ref<SolverResponse> curResponse;
     bool success = false;
     if (res == PValidity::MustBeTrue) {
-      success = solver->getResponse(current.constraints.cs(), condition,
-                                    curResponse, current.queryMetaData);
+      if (MinimizeConflict) {
+        success = solver->getResponse(current.constraints.cs(), condition,
+                                      curResponse, current.queryMetaData);
+      } else {
+        success = true;
+        curResponse = new ValidResponse(
+            ValidityCore(current.constraints.cs().cs(), condition));
+      }
     } else {
-      success = solver->getResponse(current.constraints.cs(), Expr::createIsZero(condition),
+      if (MinimizeConflict) {
+        success = solver->getResponse(current.constraints.cs(), Expr::createIsZero(condition),
                                     curResponse, current.queryMetaData);
+      } else {
+      success = true;
+      curResponse = new ValidResponse(ValidityCore(
+          current.constraints.cs().cs(), Expr::createIsZero(condition)));
+      }
     }
     if (auto validResponse = dyn_cast<ValidResponse>(curResponse)) {
-        unsatisfiabilitysCounter(validResponse, current);
+      unsatisfiabilitysCounter(validResponse, current);
     }
   }
 
