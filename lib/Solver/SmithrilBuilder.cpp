@@ -81,11 +81,9 @@ SmithrilTerm SmithrilBuilder::buildConstantArray(const char *,
                                                  unsigned value) {
   SmithrilSort domainSort = getBvSort(indexWidth);
   SmithrilSort rangeSort = getBvSort(valueWidth);
-  return mk_const_array(
-      getArraySort(
-          domainSort,
-          rangeSort), // mixa117 - waiting new mk_fresh_array_smt_symnol
-      bvConst32(valueWidth, value));
+  return smithril_mk_smt_const_symbol(
+      ctx, bvConst32(valueWidth, value),
+      smithril_mk_array_sort(ctx, domainSort, rangeSort));
 }
 
 SmithrilTerm SmithrilBuilder::getTrue() {
@@ -258,7 +256,7 @@ SmithrilTerm SmithrilBuilder::orExpr(SmithrilTerm lhs, SmithrilTerm rhs) {
   return smithril_mk_or(ctx, lhs, rhs);
 }
 SmithrilTerm SmithrilBuilder::iffExpr(SmithrilTerm lhs, SmithrilTerm rhs) {
-  return mk_term(Kind::IFF, {lhs, rhs}); // mixa117 no such?
+  return smithril_mk_iff(ctx, lhs, rhs);
 }
 
 SmithrilTerm SmithrilBuilder::bvNotExpr(SmithrilTerm expr) {
@@ -277,27 +275,13 @@ SmithrilTerm SmithrilBuilder::bvXorExpr(SmithrilTerm lhs, SmithrilTerm rhs) {
   return smithril_mk_bvxor(ctx, lhs, rhs);
 }
 
-// mixa117 uncomment + fix
-// SmithrilTerm
-// SmithrilBuilder::bvSignExtend(SmithrilTerm src,
-//                               unsigned width) { // mixa117 not such?
-//   SmithrilTerm srcAsBv = castToBitVector(src);
-//   unsigned src_width = srcAsBv.sort().bv_size();
-//   assert(src_width <= width && "attempted to extend longer data");
-//   smithril_mk_bvsge(struct SmithrilContext context, struct SmithrilTerm
-//   term1,
-//                     struct SmithrilTerm term2) if (width <= 64) {
-//     return mk_term(Kind::BV_SIGN_EXTEND, {srcAsBv}, {width - src_width});
-//   }
-
-//   SmithrilTerm signBit = bvBoolExtract(srcAsBv, src_width - 1);
-//   SmithrilTerm zeroExtended =
-//       mk_term(Kind::BV_CONCAT, {bvZero(width - src_width), src});
-//   SmithrilTerm oneExtended =
-//       mk_term(Kind::BV_CONCAT, {bvMinusOne(width - src_width), src});
-
-//   return mk_term(Kind::ITE, {signBit, oneExtended, zeroExtended});
-// }
+SmithrilTerm SmithrilBuilder::bvSignExtend(SmithrilTerm src, unsigned width) {
+  SmithrilTerm srcAsBv = castToBitVector(src);
+  unsigned src_width = smithril_get_bv_sort_size(
+      smithril_get_sort(ctx, srcAsBv)); // mixa117 good?
+  assert(src_width <= width && "attempted to extend longer data");
+  return smithril_mk_sign_extend(ctx, width - src_width, srcAsBv);
+}
 
 SmithrilTerm SmithrilBuilder::writeExpr(SmithrilTerm array, SmithrilTerm index,
                                         SmithrilTerm value) {
@@ -305,33 +289,33 @@ SmithrilTerm SmithrilBuilder::writeExpr(SmithrilTerm array, SmithrilTerm index,
 }
 
 SmithrilTerm SmithrilBuilder::readExpr(SmithrilTerm array, SmithrilTerm index) {
-  return smithril_mk_select(ctx, array, index); // mixa117 no smithril_mk_select
+  return smithril_mk_select(ctx, array, index);
 }
 
 unsigned SmithrilBuilder::getBVLength(SmithrilTerm expr) {
-  return expr.sort().bv_size(); // mixa117 no such?
+  return smithril_get_bv_sort_size(smithril_get_sort(ctx, expr));
 }
 
-// mixa117 uncomment later
-//  SmithrilTerm SmithrilBuilder::iteExpr(SmithrilTerm condition,
-//                                        SmithrilTerm whenTrue,
-//                                        SmithrilTerm whenFalse) {
-//    // Handle implicit bitvector/float coercision
-//    SmithrilSort whenTrueSort = smithril_get_sort(ctx, whenTrue);
-//    SmithrilSort whenFalseSort = smithril_get_sort(ctx, whenFalse);
+SmithrilTerm SmithrilBuilder::iteExpr(SmithrilTerm condition,
+                                      SmithrilTerm whenTrue,
+                                      SmithrilTerm whenFalse) {
+  // Handle implicit bitvector/float coercision
+  SmithrilSort whenTrueSort = smithril_get_sort(ctx, whenTrue);
+  SmithrilSort whenFalseSort = smithril_get_sort(ctx, whenFalse);
 
-//   if (whenTrueSort.is_bv() && whenFalseSort.is_fp()) {
-//     // Coerce `whenFalse` to be a bitvector
-//     whenFalse = castToBitVector(whenFalse);
-//   }
+  if (smithril_get_sort_kind(whenTrueSort) == SortKind::Bv &&
+      smithril_get_sort_kind(whenFalseSort) == SortKind::Fp) {
+    // Coerce `whenFalse` to be a bitvector
+    whenFalse = castToBitVector(whenFalse);
+  }
 
-//   if (whenTrueSort.is_fp() && whenFalseSort.is_bv()) {
-//     // Coerce `whenTrue` to be a bitvector
-//     whenTrue = castToBitVector(whenTrue);
-//   }
-//   return mk_term(Kind::ITE,
-//                  {condition, whenTrue, whenFalse}); // mixa117 no such?
-// }
+  if (smithril_get_sort_kind(whenTrueSort) == SortKind::Fp &&
+      smithril_get_sort_kind(whenFalseSort) == SortKind::Bv) {
+    // Coerce `whenTrue` to be a bitvector
+    whenTrue = castToBitVector(whenTrue);
+  }
+  return smithril_mk_ite(ctx, condition, whenTrue, whenFalse);
+}
 
 SmithrilTerm SmithrilBuilder::bvLtExpr(SmithrilTerm lhs, SmithrilTerm rhs) {
   return smithril_mk_bvult(ctx, castToBitVector(lhs), castToBitVector(rhs));
@@ -365,8 +349,7 @@ SmithrilTerm SmithrilBuilder::constructAShrByConstant(SmithrilTerm expr,
         ctx, bvMinusOne(shift), bvExtract(exprAsBv, width - 1, shift));
     SmithrilTerm unsigned_term = bvRightShift(exprAsBv, shift);
 
-    return mk_term(Kind::ITE,
-                   {isSigned, signed_term, unsigned_term}); // mixa117 no such?
+    return smithril_mk_ite(ctx, isSigned, signed_term, unsigned_term);
   }
 }
 
@@ -607,7 +590,7 @@ SmithrilTerm SmithrilBuilder::constructActual(ref<Expr> e, int *width_out) {
     // Just use any arounding mode here as we are extending
     auto out_widths = getFloatSortFromBitWidth(*width_out);
 
-    return smithril_mk_fp_to_fp_from_fp( // mixa117 to fix
+    return smithril_mk_fp_to_fp_from_fp(
         ctx, getRoundingModeSort(llvm::APFloat::rmNearestTiesToEven), src,
         out_widths.first, out_widths.second);
   }
@@ -621,7 +604,7 @@ SmithrilTerm SmithrilBuilder::constructActual(ref<Expr> e, int *width_out) {
     assert(*width_out <= srcWidth && "Invalid FPTrunc");
 
     auto out_widths = getFloatSortFromBitWidth(*width_out);
-    return smithril_mk_fp_to_fp_from_fp( // mixa117 to fix
+    return smithril_mk_fp_to_fp_from_fp(
         ctx, getRoundingModeSort(llvm::APFloat::rmNearestTiesToEven), src,
         out_widths.first, out_widths.second);
   }
@@ -632,9 +615,8 @@ SmithrilTerm SmithrilBuilder::constructActual(ref<Expr> e, int *width_out) {
     SmithrilTerm src = castToFloat(construct(ce->src, &srcWidth));
     *width_out = ce->getWidth();
     FPCastWidthAssert(width_out, "Invalid FPToUI width");
-    return smithril_mk_fp_to_ubv(
-        ctx, getRoundingModeSort(ce->roundingMode), // mixa117 to fix
-        src, ce->getWidth());
+    return smithril_mk_fp_to_ubv(ctx, getRoundingModeSort(ce->roundingMode),
+                                 src, ce->getWidth());
   }
 
   case Expr::FPToSI: {
@@ -643,9 +625,8 @@ SmithrilTerm SmithrilBuilder::constructActual(ref<Expr> e, int *width_out) {
     SmithrilTerm src = castToFloat(construct(ce->src, &srcWidth));
     *width_out = ce->getWidth();
     FPCastWidthAssert(width_out, "Invalid FPToSI width");
-    return smithril_mk_fp_to_sbv(
-        ctx, getRoundingModeSort(ce->roundingMode), // mixa117 to fix
-        src, ce->getWidth());
+    return smithril_mk_fp_to_sbv(ctx, getRoundingModeSort(ce->roundingMode),
+                                 src, ce->getWidth());
   }
 
   case Expr::UIToFP: {
@@ -657,8 +638,8 @@ SmithrilTerm SmithrilBuilder::constructActual(ref<Expr> e, int *width_out) {
 
     auto out_widths = getFloatSortFromBitWidth(*width_out);
     return smithril_mk_fp_to_fp_from_ubv(
-        ctx, getRoundingModeSort(ce->roundingMode), // mixa117 to fix
-        src, out_widths.first, out_widths.second);
+        ctx, getRoundingModeSort(ce->roundingMode), src, out_widths.first,
+        out_widths.second);
   }
 
   case Expr::SIToFP: {
@@ -670,8 +651,8 @@ SmithrilTerm SmithrilBuilder::constructActual(ref<Expr> e, int *width_out) {
 
     auto out_widths = getFloatSortFromBitWidth(*width_out);
     return smithril_mk_fp_to_fp_from_sbv(
-        ctx, getRoundingModeSort(ce->roundingMode), // mixa117 to fix
-        src, out_widths.first, out_widths.second);
+        ctx, getRoundingModeSort(ce->roundingMode), src, out_widths.first,
+        out_widths.second);
   }
 
     // Arithmetic
@@ -766,8 +747,7 @@ SmithrilTerm SmithrilBuilder::constructActual(ref<Expr> e, int *width_out) {
     }
 
     SmithrilTerm right = castToBitVector(construct(de->right, width_out));
-    SmithrilTerm result = smithril_mk_bvumod(
-        ctx, left, right); // mixa117 why in smithril umod = urem???
+    SmithrilTerm result = smithril_mk_bvumod(ctx, left, right);
 
     assert(getBVLength(result) == static_cast<unsigned>(*width_out) &&
            "width mismatch");
@@ -779,8 +759,7 @@ SmithrilTerm SmithrilBuilder::constructActual(ref<Expr> e, int *width_out) {
     SmithrilTerm left = castToBitVector(construct(de->left, width_out));
     SmithrilTerm right = castToBitVector(construct(de->right, width_out));
     assert(*width_out != 1 && "uncanonicalized srem");
-    SmithrilTerm result =
-        mk_term(Kind::BV_SREM, {left, right}); // mixa117 no such?
+    SmithrilTerm result = smithril_mk_bvsmod(ctx, left, right);
     assert(getBVLength(result) == static_cast<unsigned>(*width_out) &&
            "width mismatch");
     return result;
@@ -945,8 +924,7 @@ SmithrilTerm SmithrilBuilder::constructActual(ref<Expr> e, int *width_out) {
     SmithrilTerm left = castToFloat(construct(fcmp->left, width_out));
     SmithrilTerm right = castToFloat(construct(fcmp->right, width_out));
     *width_out = 1;
-    return smithril_mk_fp_lt(ctx, RoundingMode::RNA, left,
-                             right); // mixa117 RoundingMode does not matter
+    return smithril_mk_fp_lt(ctx, left, right);
   }
 
   case Expr::FOLe: {
@@ -954,8 +932,7 @@ SmithrilTerm SmithrilBuilder::constructActual(ref<Expr> e, int *width_out) {
     SmithrilTerm left = castToFloat(construct(fcmp->left, width_out));
     SmithrilTerm right = castToFloat(construct(fcmp->right, width_out));
     *width_out = 1;
-    return smithril_mk_fp_leq(ctx, RoundingMode::RNA, left,
-                              right); // mixa117 RoundingMode does not matter
+    return smithril_mk_fp_leq(ctx, left, right);
   }
 
   case Expr::FOGt: {
@@ -963,8 +940,7 @@ SmithrilTerm SmithrilBuilder::constructActual(ref<Expr> e, int *width_out) {
     SmithrilTerm left = castToFloat(construct(fcmp->left, width_out));
     SmithrilTerm right = castToFloat(construct(fcmp->right, width_out));
     *width_out = 1;
-    return smithril_mk_fp_gt(ctx, RoundingMode::RNA, left,
-                             right); // mixa117 RoundingMode does not matter
+    return smithril_mk_fp_gt(ctx, left, right);
   }
 
   case Expr::FOGe: {
@@ -972,8 +948,7 @@ SmithrilTerm SmithrilBuilder::constructActual(ref<Expr> e, int *width_out) {
     SmithrilTerm left = castToFloat(construct(fcmp->left, width_out));
     SmithrilTerm right = castToFloat(construct(fcmp->right, width_out));
     *width_out = 1;
-    return smithril_mk_fp_geq(ctx, RoundingMode::RNA, left,
-                              right); // mixa117 RoundingMode does not matter
+    return smithril_mk_fp_geq(ctx, left, right);
   }
 
   case Expr::IsNaN: {
@@ -1044,8 +1019,7 @@ SmithrilTerm SmithrilBuilder::constructActual(ref<Expr> e, int *width_out) {
     SmithrilTerm left = castToFloat(construct(frem->left, width_out));
     SmithrilTerm right = castToFloat(construct(frem->right, width_out));
     assert(*width_out != 1 && "uncanonicalized FRem");
-    return smithril_mk_fp_rem(ctx, RoundingMode::RNA, left,
-                              right); // mixa117 RoundingMode does not matter
+    return smithril_mk_fp_rem(ctx, left, right);
   }
 
   case Expr::FMax: {
@@ -1053,8 +1027,7 @@ SmithrilTerm SmithrilBuilder::constructActual(ref<Expr> e, int *width_out) {
     SmithrilTerm left = castToFloat(construct(fmax->left, width_out));
     SmithrilTerm right = castToFloat(construct(fmax->right, width_out));
     assert(*width_out != 1 && "uncanonicalized FMax");
-    return smithril_mk_fp_max(ctx, RoundingMode::RNA, left,
-                              right); // mixa117 RoundingMode does not matter
+    return smithril_mk_fp_max(ctx, left, right);
   }
 
   case Expr::FMin: {
@@ -1062,8 +1035,7 @@ SmithrilTerm SmithrilBuilder::constructActual(ref<Expr> e, int *width_out) {
     SmithrilTerm left = castToFloat(construct(fmin->left, width_out));
     SmithrilTerm right = castToFloat(construct(fmin->right, width_out));
     assert(*width_out != 1 && "uncanonicalized FMin");
-    return smithril_mk_fp_min(ctx, RoundingMode::RNA, left,
-                              right); // mixa117 RoundingMode does not matter
+    return smithril_mk_fp_min(ctx, left, right);
   }
 
   case Expr::FSqrt: {
@@ -1085,16 +1057,14 @@ SmithrilTerm SmithrilBuilder::constructActual(ref<Expr> e, int *width_out) {
     FAbsExpr *fabsExpr = cast<FAbsExpr>(e);
     SmithrilTerm arg = castToFloat(construct(fabsExpr->expr, width_out));
     assert(*width_out != 1 && "uncanonicalized FAbs");
-    return smithril_mk_fp_abs(ctx, RoundingMode::RNA,
-                              arg); // mixa117 RoundingMode does not matter
+    return smithril_mk_fp_abs(ctx, arg);
   }
 
   case Expr::FNeg: {
     FNegExpr *fnegExpr = cast<FNegExpr>(e);
     SmithrilTerm arg = castToFloat(construct(fnegExpr->expr, width_out));
     assert(*width_out != 1 && "uncanonicalized FNeg");
-    return smithril_mk_fp_neg(ctx, RoundingMode::RNA,
-                              arg); // mixa117 RoundingMode does not matter
+    return smithril_mk_fp_neg(ctx, arg);
   }
 
 // unused due to canonicalization
@@ -1112,11 +1082,11 @@ case Expr::Sge:
   }
 }
 
-//mixa117 need this?
-// SmithrilTerm SmithrilBuilder::fpToIEEEBV(const SmithrilTerm &fp) {
-//   if (smithril_get_sort_kind(smithril_get_sort(ctx, fp)) != SortKind::Fp) {
-//     klee_error("SmithrilBuilder::fpToIEEEBV accepts only floats");
-//   }
+// mixa117 need this?
+//  SmithrilTerm SmithrilBuilder::fpToIEEEBV(const SmithrilTerm &fp) {
+//    if (smithril_get_sort_kind(smithril_get_sort(ctx, fp)) != SortKind::Fp) {
+//      klee_error("SmithrilBuilder::fpToIEEEBV accepts only floats");
+//    }
 
 //   SmithrilTerm signBit = mk_const(getBvSort(1));
 //   SmithrilTerm exponentBits = mk_const(getBvSort(fp.sort().fp_exp_size()));
@@ -1170,15 +1140,15 @@ SmithrilTerm SmithrilBuilder::castToFloat(const SmithrilTerm &e) {
     // Already a float
     return e;
   } else if (smithril_get_sort_kind(currentSort) == SortKind::Bv) {
-    unsigned bitWidth = currentSort.bv_size(); // mixa117 no such?
+    unsigned bitWidth = smithril_get_bv_sort_size(currentSort);
     switch (bitWidth) {
     case Expr::Int16:
     case Expr::Int32:
     case Expr::Int64:
     case Expr::Int128: {
       auto out_width = getFloatSortFromBitWidth(bitWidth);
-      return mk_term(Kind::FP_TO_FP_FROM_BV, {e}, // mixa117 no such?
-                     {out_width.first, out_width.second});
+      return smithril_mk_fp_to_fp_from_bv(ctx, e, out_width.first,
+                                          out_width.second);
     }
     case Expr::Fl80: {
       // The bit pattern used by x87 fp80 and what we use in Smithril are
@@ -1226,10 +1196,12 @@ SmithrilTerm SmithrilBuilder::castToFloat(const SmithrilTerm &e) {
       SmithrilTerm exponentBits = smithril_mk_extract(ctx, 78, 64, e);
       SmithrilTerm significandIntegerBit = smithril_mk_extract(ctx, 63, 63, e);
       SmithrilTerm significandFractionBits = smithril_mk_extract(ctx, 62, 0, e);
-
-      SmithrilTerm ieeeBitPatternAsFloat =
-          mk_term(Kind::FP_FP, {signBit, exponentBits,
-                                significandFractionBits}); // mixa117 no such?
+      SmithrilTerm ieeeBitPattern =
+          smithril_mk_concat(ctx, signBit, exponentBits);
+      ieeeBitPattern =
+          smithril_mk_concat(ctx, ieeeBitPattern, significandFractionBits);
+      SmithrilTerm ieeeBitPatternAsFloat = smithril_mk_fp_to_fp_from_bv(
+          ctx, ieeeBitPattern, 14, 62); // mixa117 this ok?
 
       // Generate side constraint on the significand integer bit. It is not
       // used in `ieeeBitPatternAsFloat` so we need to constrain that bit to
@@ -1257,7 +1229,7 @@ SmithrilTerm SmithrilBuilder::castToFloat(const SmithrilTerm &e) {
 SmithrilTerm SmithrilBuilder::castToBitVector(const SmithrilTerm &e) {
   SmithrilSort currentSort = smithril_get_sort(ctx, e);
   if (smithril_get_sort_kind(currentSort) == SortKind::Bool) {
-    return mk_term(Kind::ITE, {e, bvOne(1), bvZero(1)}); // mixa117 no such?
+    return smithril_mk_ite(ctx, e, bvOne(1), bvZero(1));
   } else if (smithril_get_sort_kind(currentSort) == SortKind::Bv) {
     // Already a bitvector
     return e;
@@ -1265,10 +1237,10 @@ SmithrilTerm SmithrilBuilder::castToBitVector(const SmithrilTerm &e) {
     // Note this picks a single representation for NaN which means
     // `castToBitVector(castToFloat(e))` might not equal `e`.
     unsigned exponentBits =
-        currentSort.fp_exp_size(); // mixa117 no such? have fp_get_bv_exp_size
+        smithril_fp_get_bv_exp_size(e); // have fp_get_bv_exp_size
     unsigned significandBits =
-        currentSort.fp_sig_size(); // Includes implicit bit // mixa117 no such?
-                                   // have fp_get_bv_sig_size
+        smithril_fp_get_bv_sig_size(e); // Includes implicit bit
+                                        // have fp_get_bv_sig_size
     unsigned floatWidth = exponentBits + significandBits;
 
     switch (floatWidth) {
@@ -1351,10 +1323,10 @@ SmithrilTerm SmithrilBuilder::getx87FP80ExplicitSignificandIntegerBit(
   SmithrilTerm significandIntegerBitCondition = orExpr(isDenormal, isZero);
 
   SmithrilTerm significandIntegerBitConstrainedValue =
-      mk_term(Kind::ITE, {significandIntegerBitCondition, zeroBvOne, oneBvOne}); //mixa117 no such?
+      smithril_mk_ite(ctx, significandIntegerBitCondition, zeroBvOne, oneBvOne);
 
   return significandIntegerBitConstrainedValue;
 }
 } // namespace klee
 
-#endif // ENABLE_SMITHRIL
+// #endif ENABLE_SMITHRIL
